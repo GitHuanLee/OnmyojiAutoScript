@@ -1,34 +1,25 @@
+import json
+
 import pytest
-from pydantic import ValidationError
 
-from tasks.GlobalGame.config import GameAccountSettings, GlobalGame
-
-
-def test_game_accounts_support_multiple_platforms_and_passwords():
-    """账号列表应保留每个账号的密码和独立平台选项。"""
-    settings = GameAccountSettings()
-    settings.accounts = [
-        {"account": "ios-user", "password": "ios-secret", "platform": "IOS"},
-        {"account": "android-user", "password": "android-secret", "platform": "Android"},
-    ]
-
-    assert settings.model_dump(mode="json")["accounts"] == [
-        {"account": "ios-user", "password": "ios-secret", "platform": "IOS"},
-        {"account": "android-user", "password": "android-secret", "platform": "Android"},
-    ]
+from tasks.GlobalGame.config import GameAccountSettings
 
 
-def test_game_account_platform_rejects_unsupported_values():
-    """平台字段只接受 IOS 或 Android，避免保存无法识别的平台名称。"""
-    with pytest.raises(ValidationError):
-        GameAccountSettings(accounts=[{"platform": "Andraid"}])
+def test_game_accounts_are_loaded_from_external_file(tmp_path):
+    """账号密码应从独立文件读取，主配置只保留文件地址。"""
+    account_file = tmp_path / 'accounts.json'
+    account_file.write_text(json.dumps({'accounts': [
+        {'account': 'ios-user', 'password': 'ios-secret', 'platform': 'IOS'},
+        {'account': 'android-user', 'password': 'android-secret', 'platform': 'Android'},
+    ]}), encoding='utf-8')
+    accounts = GameAccountSettings(account_file=str(account_file)).load_accounts()
+    assert [account.platform.value for account in accounts] == ['IOS', 'Android']
+    assert accounts[0].password == 'ios-secret'
 
 
-def test_global_game_schema_exposes_account_list_for_gui():
-    """全局游戏设置 schema 应将账号列表声明为数组供配置界面渲染。"""
-    schema = GlobalGame.model_json_schema()
-    account_settings_ref = schema["properties"]["account_settings"]["$ref"].rsplit("/", 1)[-1]
-    account_settings = schema["$defs"][account_settings_ref]
-
-    assert account_settings["properties"]["accounts"]["type"] == "array"
-    assert account_settings["properties"]["accounts"]["items"]["$ref"].endswith("/GameAccount")
+def test_game_accounts_reject_invalid_platform(tmp_path):
+    """外部文件中的平台值必须限制为 IOS 或 Android。"""
+    account_file = tmp_path / 'accounts.json'
+    account_file.write_text(json.dumps({'accounts': [{'platform': 'Andraid'}]}), encoding='utf-8')
+    with pytest.raises(ValueError, match='Invalid account file'):
+        GameAccountSettings(account_file=str(account_file)).load_accounts()

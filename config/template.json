@@ -87,13 +87,7 @@
       "password": ""
     },
     "account_settings": {
-      "accounts": [
-        {
-          "account": "",
-          "password": "",
-          "platform": "Android"
-        }
-      ]
+      "account_file": "config/accounts.json"
     }
   },
   "area_boss": {

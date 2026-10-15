@@ -2,11 +2,13 @@
 # @author runhey
 # github https://github.com/runhey
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, Field
+from pathlib import Path
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from tasks.GlobalGame.config_emergency import Emergency
 from tasks.Component.config_base import ConfigBase
 from tasks.Component.Costume.config import CostumeConfig
+from module.config.utils import read_file
 
 class Transport(str, Enum):
     TCP = 'TCP'
@@ -31,13 +33,34 @@ class GameAccount(BaseModel):
 
 
 class GameAccountSettings(BaseModel):
-    """管理全局游戏账号列表，GUI 更新时校验列表条目并保留空白新增项。"""
+    """保存账号文件地址，并按需读取外部账号凭据。"""
 
     model_config = ConfigDict(validate_assignment=True)
 
-    accounts: list[GameAccount] = Field(default_factory=lambda: [GameAccount()],
-                                        title='Game Accounts',
-                                        description='game_accounts_help')
+    account_file: str = Field(default='config/accounts.json', title='Account File',
+                               description='account_file_help')
+
+    def load_accounts(self, base_dir: Path | None = None) -> list[GameAccount]:
+        """读取并校验外部账号文件，文件内容不得写回主配置。
+
+        文件支持 JSON/YAML，根节点可以是账号数组，也可以是包含 ``accounts``
+        数组的对象；路径以工作目录为基准，传入 base_dir 仅用于测试和嵌入式调用。
+        :return: 按文件顺序排列的账号列表。
+        :raises ValueError: 文件不存在、格式错误或账号字段校验失败。
+        """
+        path = Path(self.account_file)
+        if not path.is_absolute():
+            path = (base_dir or Path.cwd()) / path
+        if not path.is_file():
+            raise ValueError(f'Account file does not exist: {path}')
+        try:
+            raw = read_file(str(path))
+            rows = raw.get('accounts', []) if isinstance(raw, dict) else raw
+            if not isinstance(rows, list):
+                raise ValueError('Account file root must be a list or an object with accounts')
+            return [GameAccount.model_validate(row) for row in rows]
+        except (OSError, ValueError, TypeError, ValidationError) as exc:
+            raise ValueError(f'Invalid account file: {path}') from exc
 
 
 class TeamFlow(BaseModel):

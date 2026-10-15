@@ -243,6 +243,10 @@ class ConfigModel(ConfigBase):
         """
         self.write_json(self.config_name, self.model_dump())
 
+    def load_game_accounts(self):
+        """读取全局账号配置文件，供登录流程按需获取账号凭据。"""
+        return self.global_game.account_settings.load_accounts()
+
     @staticmethod
     def type(key: str) -> str:
         """

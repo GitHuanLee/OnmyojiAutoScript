@@ -744,6 +744,7 @@ Refresh：直接刷新，如果刷新操作进入CD，将标记为失败并退�
     <name>Args</name>
     <message><source>GameAccountSettings</source><translation>游戏账号配置</translation></message>
     <message><source>Game Account Settings</source><translation>游戏账号配置</translation></message>
+    <message><source>Account File</source><translation>账号配置文件</translation></message>
     <message><source>Game Accounts</source><translation>账号列表</translation></message>
     <message><source>Account</source><translation>账号</translation></message>
     <message><source>Password</source><translation>密码</translation></message>
@@ -753,6 +754,7 @@ Refresh：直接刷新，如果刷新操作进入CD，将标记为失败并退�
     <message><source>Remove</source><translation>删除</translation></message>
     <message><source>Add Account</source><translation>添加账号</translation></message>
     <message><source>game_accounts_help</source><translation>可添加多个游戏账号，并分别设置账号、密码和客户端类型。</translation></message>
+    <message><source>account_file_help</source><translation>账号文件路径，支持 JSON/YAML；建议使用 config/accounts.json。</translation></message>
     <message><source>game_account_help</source><translation>输入该游戏账号的登录名。</translation></message>
     <message><source>game_password_help</source><translation>输入该游戏账号的登录密码。</translation></message>
     <message><source>game_account_platform_help</source><translation>选择此账号使用的游戏客户端平台。</translation></message>
