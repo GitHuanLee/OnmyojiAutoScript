@@ -85,6 +85,15 @@
       "ca": "",
       "username": "",
       "password": ""
+    },
+    "account_settings": {
+      "accounts": [
+        {
+          "account": "",
+          "password": "",
+          "platform": "Android"
+        }
+      ]
     }
   },
   "area_boss": {

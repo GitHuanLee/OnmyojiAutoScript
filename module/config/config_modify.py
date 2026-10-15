@@ -44,12 +44,21 @@ class ConfigModify(Config):
 
     def gui_set_task(self, task: str, group: str, argument: str, value) -> bool:
         """
-        设置给gui显示的任务 的参数的具体值
-        :return:
+        更新 GUI 中指定配置字段并保存。
+
+        业务规则：列表型字段由 GUI 以 JSON 字符串提交，需先解码后交给
+        Pydantic 字段校验；普通字段保持现有标量更新方式。
+        :param task: 配置任务名，如 GlobalGame。
+        :param group: 任务中的配置组名。
+        :param argument: 配置字段名。
+        :param value: GUI 提交的字段值；列表可为 JSON 字符串。
+        :return: 更新并保存成功时返回 True，字段不存在或校验失败时返回 False。
         """
         task = convert_to_underscore(task)
         group = convert_to_underscore(group)
         argument = convert_to_underscore(argument)
+        is_game_account_list = (task == 'global_game' and group == 'account_settings'
+                                and argument == 'accounts')
 
         path = f'{task}.{group}.{argument}'
         task_object = getattr(self.model, task, None)
@@ -57,17 +66,29 @@ class ConfigModify(Config):
         argument_object = getattr(group_object, argument, None)
 
         if argument_object is None:
-            logger.error(f'gui_set_task {task}.{group}.{argument}.{value} failed')
+            if is_game_account_list:
+                logger.error('gui_set_task global_game.account_settings.accounts failed')
+            else:
+                logger.error(f'gui_set_task {task}.{group}.{argument}.{value} failed')
             return False
 
         try:
+            if isinstance(argument_object, list) and isinstance(value, str):
+                value = json.loads(value)
             setattr(group_object, argument, value)
             argument_object = getattr(group_object, argument, None)
-            logger.info(f'gui_set_task {task}.{group}.{argument}.{argument_object}')
+            if is_game_account_list:
+                logger.info('gui_set_task global_game.account_settings.accounts updated (%s accounts)',
+                            len(argument_object))
+            else:
+                logger.info(f'gui_set_task {task}.{group}.{argument}.{argument_object}')
             super().save()  # 我是没有想到什么方法可以使得属性改变自动保存的
             return True
-        except ValidationError as e:
-            logger.error(e)
+        except (ValidationError, json.JSONDecodeError, TypeError) as e:
+            if is_game_account_list:
+                logger.error('Invalid game account list; account values were omitted from the log')
+            else:
+                logger.error(e)
             return False
 
     def gui_task_list(self) -> str:

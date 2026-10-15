@@ -113,6 +113,14 @@ Item {
                         return
                     }
                 }
+                else if(arg.type === "array"){
+                    object = account_list_item.createObject(group_column)
+                    if(object === null){
+                        console.error("can not create component account_list_item", arg.title)
+                        return
+                    }
+                    object.groupName = groupName
+                }
 
 
                 if(object === null){
@@ -534,6 +542,112 @@ Item {
                     return
                 }
                 string_description.text = qsTr(modelData.description.replace("\\n","\n"))
+            }
+        }
+    }
+
+    Component{
+        id: account_list_item
+        Item{
+            id: accountListItem
+            property var modelData: null
+            property var accountList: []
+            property string groupName: ""
+            width: parent.width
+            implicitHeight: account_column.implicitHeight
+
+            Column{
+                id: account_column
+                width: parent.width
+                spacing: 8
+
+                FluText{
+                    id: account_title
+                    font: FluTextStyle.BodyStrong
+                    wrapMode: Text.WrapAnywhere
+                }
+                FluText{
+                    id: account_description
+                    width: parent.width
+                    font: FluTextStyle.Caption
+                    wrapMode: Text.WordWrap
+                }
+                Repeater{
+                    model: accountListItem.accountList
+                    delegate: RowLayout{
+                        width: account_column.width
+                        spacing: 6
+
+                        FluTextBox{
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Account")
+                            text: modelData.account || ""
+                            onEditingFinished: accountListItem.updateAccount(index, "account", text)
+                        }
+                        FluPasswordBox{
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("Password")
+                            text: modelData.password || ""
+                            onEditingFinished: accountListItem.updateAccount(index, "password", text)
+                        }
+                        FComboBox{
+                            Layout.preferredWidth: 120
+                            model: ["IOS", "Android"]
+                            Component.onCompleted: show(modelData.platform || "Android")
+                            onActivated: accountListItem.updateAccount(index, "platform", currentText)
+                        }
+                        FluButton{
+                            text: qsTr("Remove")
+                            onClicked: accountListItem.removeAccount(index)
+                        }
+                    }
+                }
+                FluButton{
+                    text: qsTr("Add Account")
+                    onClicked: accountListItem.addAccount()
+                }
+            }
+
+            /** Saves the complete list because each row is edited as one validated config value. */
+            function persistAccounts(){
+                if(!set_task(groupName, modelData.name, JSON.stringify(accountList))){
+                    console.error("save game account list failed")
+                }
+            }
+
+            /** Copies the changed row so Repeater refreshes after a field edit. */
+            function updateAccount(index, field, value){
+                const nextList = accountList.slice()
+                nextList[index] = Object.assign({}, nextList[index])
+                nextList[index][field] = value
+                accountList = nextList
+                persistAccounts()
+            }
+
+            /** Adds a blank Android account as the safe default for a new row. */
+            function addAccount(){
+                const nextList = accountList.slice()
+                nextList.push({"account": "", "password": "", "platform": "Android"})
+                accountList = nextList
+                persistAccounts()
+            }
+
+            /** Removes the selected account and persists the remaining entries. */
+            function removeAccount(index){
+                const nextList = accountList.slice()
+                nextList.splice(index, 1)
+                accountList = nextList
+                persistAccounts()
+            }
+
+            onModelDataChanged: {
+                if(modelData === null){
+                    console.error("account list model is null")
+                    return
+                }
+                accountList = modelData.value || []
+                account_title.text = qsTr(modelData.title)
+                account_description.text = modelData.description ? qsTr(modelData.description) : ""
             }
         }
     }

@@ -1,0 +1,3242 @@
+# 代码结构文档
+
+> 本文按当前 Git 工作树生成，描述源码、配置、测试、构建文件和资源文件的大致职责。文件清单覆盖仓库中所有受版本控制文件；二进制资源按文件列出，但不展开其内部内容。
+
+## 1. 总体架构
+
+项目以 `script.py` 为自动化任务入口，以 `module/` 提供设备控制、图像识别、配置、调度和服务基础设施，以 `tasks/` 按游戏活动拆分业务流程。`server.py` 暴露 Web 控制接口，`gui.py` 负责桌面端启动；`assets/` 保存 OCR/点击/界面资源，`fluentui/` 提供独立的 Qt/QML UI 组件库。
+
+典型调用链如下：
+
+```text
+script.py / gui.py / server.py
+        -> module/config + module/daemon + module/server
+        -> module/device + module/ocr + module/handler
+        -> tasks/<活动>/ 业务任务
+        -> assets/ 图像、文本和交互资源
+```
+
+## 2. 顶层目录职责
+
+| 路径 | 职责 |
+| --- | --- |
+| `module/` | 可复用基础框架：设备、OCR、配置、GUI、网络服务、任务流。 |
+| `tasks/` | 按阴阳师活动拆分的自动化任务及其资源、测试和流程组件。 |
+| `tests/` | 跨模块单元测试和回归测试。 |
+| `assets/` | 国际化文本和运行时图像等静态资源。 |
+| `fluentui/` | C++/Qt/QML Fluent UI 组件库及示例工程。 |
+| `deploy/` | 安装器、启动器、Docker 与部署辅助脚本。 |
+| `dev_tools/` | 资源提取、模板更新、依赖生成等开发工具。 |
+| `config/` | 项目级配置模板及特定功能数据。 |
+| `bin/` | ADB、投屏和设备自动化所需的第三方二进制文件。 |
+| `.github/` | Issue 模板、CI、Agentic Workflow 和协作规则。 |
+
+## 3. 文件级清单
+
+以下按顶层目录分组。括号中的描述是维护视角下的文件用途概览；修改前应结合调用方和测试确认具体行为。
+
+### `根目录/`
+
+- `.gitattributes`：版本控制或构建上下文忽略规则。
+- `CODE_STRUCTURE.md`：本文档，按目录和文件说明仓库代码、配置、测试及资源的职责。
+- `AGENTS.md`：贡献者指南，说明开发、测试、提交和协作约定。
+- `LICENSE`：GNU GPL v3 许可证全文。
+- `README.md`：项目介绍、功能范围、安装入口与社区说明。
+- `docker-compose.yaml`：本地 OAS 容器编排配置，挂载源码并构建 Docker 镜像。
+- `gui.py`：桌面 GUI 启动入口，负责启动客户端界面。
+- `requirements-in.txt`：用于生成依赖清单的输入依赖。
+- `requirements.txt`：完整运行环境的 Python 依赖锁定清单。
+- `script.py`：主任务调度入口，解析参数、加载配置并启动任务执行流程。
+- `server.py`：Web 服务启动入口，解析服务参数并运行 FastAPI/Uvicorn。
+### `.github/`
+
+- `.github/ISSUE_TEMPLATE/bug_report.yaml`：YAML 配置或自动化流程定义。
+- `.github/ISSUE_TEMPLATE/feature-request.yaml`：YAML 配置或自动化流程定义。
+- `.github/ISSUE_TEMPLATE/others.yaml`：YAML 配置或自动化流程定义。
+- `.github/ISSUE_TEMPLATE/question.yaml`：YAML 配置或自动化流程定义。
+- `.github/agents/agentic-workflows.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/aw/actions-lock.json`：JSON 数据、元数据或工具输入文件。
+- `.github/aw/logs/.gitignore`：版本控制或构建上下文忽略规则。
+- `.github/skills/agentic-workflows/SKILL.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/agentics-maintenance.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/assets/.gitignore`：版本控制或构建上下文忽略规则。
+- `.github/workflows/assets/tasks-i18n-2026-04-22.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/auto-create-pr.yaml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/auto-merge-pr.yaml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/copilot-setup-steps.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/github-mirror.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/issue-handle-bug.lock.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/issue-handle-bug.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/issue-handle-enhancement.lock.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/issue-handle-enhancement.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/issue-handle-other.lock.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/issue-handle-other.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/issue-handle-question.lock.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/issue-handle-question.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/issue-triage.lock.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/issue-triage.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/pr-review-checklist.lock.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/pr-review-checklist.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/pr-review-intent.lock.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/pr-review-intent.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/shared/engine.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/shared/network.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/shared/review-checklist.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+- `.github/workflows/tools/extract_tasks_i18n.py`：提取 tasks 目录下子任务名称的翻译 从两个源文件提取： 1. module/config/i18n/zh_CN.xml (本仓库) 2. https://raw.githubusercontent.com/runhey/OASX/master/lib/config/translation/i18n_cn.dart (外部仓库) 输出到 .github/；主要定义 `get_tasks_directories, extract_from_zh_cn_xml, extract_from_oasx, merge_translations, generate_markdown, main`。
+- `.github/workflows/weekly-report.lock.yml`：GitHub Actions/Agentic Workflows 自动化流程定义。
+- `.github/workflows/weekly-report.md`：GitHub 协作、Issue/PR 自动化或开发辅助文档。
+### `根目录/`
+
+- `.gitignore`：版本控制或构建上下文忽略规则。
+- `AGENTS.md`：贡献者指南，说明开发、测试、提交和协作约定。
+- `LICENSE`：GNU GPL v3 许可证全文。
+- `README.md`：项目介绍、功能范围、安装入口与社区说明。
+### `assets/`
+
+- `assets/i18n/en-US.json`：国际化语言资源，提供界面文案映射。
+- `assets/i18n/zh-CN.json`：国际化语言资源，提供界面文案映射。
+### `bin/`
+
+- `bin/droidcast/DroidCast_raw-release-1.0.apk`：设备连接、投屏或自动化运行所需的第三方二进制依赖。
+- `bin/hermit/hermit.apk`：设备连接、投屏或自动化运行所需的第三方二进制依赖。
+- `bin/scrcpy/scrcpy-server-v1.20.jar`：设备连接、投屏或自动化运行所需的第三方二进制依赖。
+### `config/`
+
+- `config/findjade/find_jade.json`：运行时配置或配置模板，定义任务参数和默认值。
+- `config/template.json`：运行时配置或配置模板，定义任务参数和默认值。
+### `deploy/`
+
+- `deploy/adb.py`：Python 模块；主要定义 `show_fix_tip, AdbManager`。
+- `deploy/config.py`：Python 模块；主要定义 `ExecutionError, ConfigModel, DeployConfig`。
+- `deploy/docker/.dockerignore`：版本控制或构建上下文忽略规则。
+- `deploy/docker/Dockerfile`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `deploy/docker/Dockerfile.cn`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `deploy/docker/requirements.txt`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `deploy/docker/requirements_generator.py`：Python 模块；主要定义 `read_file, write_file, docker_requirements_generate`。
+- `deploy/emulator.py`：Python 模块；主要定义 `VirtualBoxEmulator, EmulatorConnect`。
+- `deploy/fluentui.py`：Python 模块；主要定义 `FluentuiManager`。
+- `deploy/git.py`：Python 模块；主要定义 `GitManager`。
+- `deploy/installer.py`：Python 模块；主要定义 `Installer`。
+- `deploy/launcher/logo.ico`：二进制、图像、字体或图标资源。
+- `deploy/launcher/oas-gui.bat`：平台启动或构建脚本。
+- `deploy/logger.py`：Python 模块；主要定义 `hr`。
+- `deploy/patch.py`：Python 模块；主要定义 `patch_trust_env, check_running_directory, patch_uiautomator2, pre_checks`。
+- `deploy/pip.py`：Python 模块；主要定义 `PipManager`。
+- `deploy/process.py`：Python 模块；主要定义 `ProcessManager`。
+- `deploy/template`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `deploy/utils.py`：Python 模块；主要定义 `cached_property, iter_folder, poor_yaml_read, poor_yaml_write, DataProcessInfo, iter_process`。
+### `dev_tools/`
+
+- `dev_tools/.gitignore`：版本控制或构建上下文忽略规则。
+- `dev_tools/README.md`：Markdown 项目说明或开发文档。
+- `dev_tools/assets_extract.py`：Python 模块；主要定义 `name_transform, ImageExtractor, ClickExtractor, LongClickExtractor, SwipeExtractor, OcrExtractor, ListExtractor, AssetsExtractor`。
+- `dev_tools/assets_test.py`：Python 模块；主要定义 `load_image, detect_image, detect_ocr, _roi_to_text, detect_image_detail, detect_ocr_detail`。
+- `dev_tools/decorator.py`：Python 模块；主要定义 `usage_time`。
+- `dev_tools/generate_requirements.py`：Python 模块；主要定义 `generate`。
+- `dev_tools/get_images.py`：Python 模块；主要定义 `GetAnimation`。
+- `dev_tools/template_update.py`：Python 模块。
+### `根目录/`
+
+- `docker-compose.yaml`：本地 OAS 容器编排配置，挂载源码并构建 deploy/docker 镜像。
+### `fluentui/`
+
+- `fluentui/.gitignore`：版本控制或构建上下文忽略规则。
+- `fluentui/3rdparty/mingw/libcrypto-1_1-x64.dll`：Fluent UI 示例或组件展示资源。
+- `fluentui/3rdparty/mingw/libgcc_s_seh-1.dll`：Fluent UI 示例或组件展示资源。
+- `fluentui/3rdparty/mingw/libssl-1_1-x64.dll`：Fluent UI 示例或组件展示资源。
+- `fluentui/3rdparty/mingw/libstdc++-6.dll`：Fluent UI 示例或组件展示资源。
+- `fluentui/3rdparty/mingw/libwinpthread-1.dll`：Fluent UI 示例或组件展示资源。
+- `fluentui/3rdparty/msvc/libcrypto-1_1-x64.dll`：Fluent UI 示例或组件展示资源。
+- `fluentui/3rdparty/msvc/libssl-1_1-x64.dll`：Fluent UI 示例或组件展示资源。
+- `fluentui/CMakeLists.txt`：CMake 构建配置，定义 Fluent UI 或示例工程的编译目标。
+- `fluentui/License`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `fluentui/README.md`：Fluent UI 组件库说明或示例文档。
+- `fluentui/doc/preview/buttons.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/doc/preview/carousel.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/doc/preview/home.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/doc/preview/tableview.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/doc/preview/theme.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/doc/preview/treeview.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/CMakeLists.txt`：CMake 构建配置，定义 Fluent UI 或示例工程的编译目标。
+- `fluentui/example/example.rc`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `fluentui/example/favicon.ico`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/qml/App.qml`：Qt Quick/QML 界面文件，提供 `App` 控件、页面或窗口。
+- `fluentui/example/qml/component/CodeExpander.qml`：Qt Quick/QML 界面文件，提供 `CodeExpander` 控件、页面或窗口。
+- `fluentui/example/qml/global/ItemsFooter.qml`：Qt Quick/QML 界面文件，提供 `ItemsFooter` 控件、页面或窗口。
+- `fluentui/example/qml/global/ItemsOriginal.qml`：Qt Quick/QML 界面文件，提供 `ItemsOriginal` 控件、页面或窗口。
+- `fluentui/example/qml/global/MainEvent.qml`：Qt Quick/QML 界面文件，提供 `MainEvent` 控件、页面或窗口。
+- `fluentui/example/qml/global/qmldir`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `fluentui/example/qml/page/T_Awesome.qml`：Qt Quick/QML 界面文件，提供 `T_Awesome` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Badge.qml`：Qt Quick/QML 界面文件，提供 `T_Badge` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_BreadcrumbBar.qml`：Qt Quick/QML 界面文件，提供 `T_BreadcrumbBar` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Buttons.qml`：Qt Quick/QML 界面文件，提供 `T_Buttons` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_CalendarPicker.qml`：Qt Quick/QML 界面文件，提供 `T_CalendarPicker` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Carousel.qml`：Qt Quick/QML 界面文件，提供 `T_Carousel` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_CheckBox.qml`：Qt Quick/QML 界面文件，提供 `T_CheckBox` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_ColorPicker.qml`：Qt Quick/QML 界面文件，提供 `T_ColorPicker` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_DatePicker.qml`：Qt Quick/QML 界面文件，提供 `T_DatePicker` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Dialog.qml`：Qt Quick/QML 界面文件，提供 `T_Dialog` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Expander.qml`：Qt Quick/QML 界面文件，提供 `T_Expander` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_FlipView.qml`：Qt Quick/QML 界面文件，提供 `T_FlipView` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Home.qml`：Qt Quick/QML 界面文件，提供 `T_Home` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_InfoBar.qml`：Qt Quick/QML 界面文件，提供 `T_InfoBar` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_MediaPlayer.qml`：Qt Quick/QML 界面文件，提供 `T_MediaPlayer` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Menu.qml`：Qt Quick/QML 界面文件，提供 `T_Menu` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_MultiWindow.qml`：Qt Quick/QML 界面文件，提供 `T_MultiWindow` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Pivot.qml`：Qt Quick/QML 界面文件，提供 `T_Pivot` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Progress.qml`：Qt Quick/QML 界面文件，提供 `T_Progress` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_RatingControl.qml`：Qt Quick/QML 界面文件，提供 `T_RatingControl` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Rectangle.qml`：Qt Quick/QML 界面文件，提供 `T_Rectangle` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Settings.qml`：Qt Quick/QML 界面文件，提供 `T_Settings` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Slider.qml`：Qt Quick/QML 界面文件，提供 `T_Slider` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_StatusView.qml`：Qt Quick/QML 界面文件，提供 `T_StatusView` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_TabView.qml`：Qt Quick/QML 界面文件，提供 `T_TabView` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_TableView.qml`：Qt Quick/QML 界面文件，提供 `T_TableView` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Text.qml`：Qt Quick/QML 界面文件，提供 `T_Text` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_TextBox.qml`：Qt Quick/QML 界面文件，提供 `T_TextBox` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Theme.qml`：Qt Quick/QML 界面文件，提供 `T_Theme` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_TimePicker.qml`：Qt Quick/QML 界面文件，提供 `T_TimePicker` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_ToggleSwitch.qml`：Qt Quick/QML 界面文件，提供 `T_ToggleSwitch` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Tooltip.qml`：Qt Quick/QML 界面文件，提供 `T_Tooltip` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_TreeView.qml`：Qt Quick/QML 界面文件，提供 `T_TreeView` 控件、页面或窗口。
+- `fluentui/example/qml/page/T_Typography.qml`：Qt Quick/QML 界面文件，提供 `T_Typography` 控件、页面或窗口。
+- `fluentui/example/qml/window/AboutWindow.qml`：Qt Quick/QML 界面文件，提供 `AboutWindow` 控件、页面或窗口。
+- `fluentui/example/qml/window/ChatWindow.qml`：Qt Quick/QML 界面文件，提供 `ChatWindow` 控件、页面或窗口。
+- `fluentui/example/qml/window/LoginWindow.qml`：Qt Quick/QML 界面文件，提供 `LoginWindow` 控件、页面或窗口。
+- `fluentui/example/qml/window/MainWindow.qml`：Qt Quick/QML 界面文件，提供 `MainWindow` 控件、页面或窗口。
+- `fluentui/example/qml/window/MediaWindow.qml`：Qt Quick/QML 界面文件，提供 `MediaWindow` 控件、页面或窗口。
+- `fluentui/example/qml/window/SingleInstanceWindow.qml`：Qt Quick/QML 界面文件，提供 `SingleInstanceWindow` 控件、页面或窗口。
+- `fluentui/example/qml/window/SingleTaskWindow.qml`：Qt Quick/QML 界面文件，提供 `SingleTaskWindow` 控件、页面或窗口。
+- `fluentui/example/qml/window/StandardWindow.qml`：Qt Quick/QML 界面文件，提供 `StandardWindow` 控件、页面或窗口。
+- `fluentui/example/res/image/banner_1.jpg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/banner_2.jpg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/banner_3.jpg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/bg_home_header.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Acrylic.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/AnimatedIcon.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/AnimatedVisualPlayer.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/AnimationInterop.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/AppBarButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/AppBarSeparator.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/AppBarToggleButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/AutoSuggestBox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/AutomationProperties.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Border.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/BreadcrumbBar.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Button.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/CalendarDatePicker.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/CalendarView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Canvas.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Checkbox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Clipboard.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ColorPaletteResources.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ColorPicker.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ComboBox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/CommandBar.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/CommandBarFlyout.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/CompactSizing.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ConnectedAnimation.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ContentDialog.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/CreateMultipleWindows.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/DataGrid.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/DatePicker.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/DropDownButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/EasingFunction.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Expander.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/FilePicker.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/FlipView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Flyout.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Grid.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/GridView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/HyperlinkButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/IconElement.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Image.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ImplicitTransition.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/InfoBadge.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/InfoBar.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/InkCanvas.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/InkToolbar.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/InputValidation.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ItemsRepeater.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Line.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ListBox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ListView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/MediaPlayerElement.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/MenuBar.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/MenuFlyout.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/NavigationView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/NumberBox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/PageTransition.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ParallaxView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/PasswordBox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/PersonPicture.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/PipsPager.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Pivot.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ProgressBar.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ProgressRing.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/PullToRefresh.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RadialGradientBrush.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RadioButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RadioButtons.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RatingControl.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RelativePanel.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RepeatButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RevealFocus.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RichEditBox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/RichTextBlock.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ScrollViewer.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/SemanticZoom.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Shape.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Slider.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Sound.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/SplitButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/SplitView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/StackPanel.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/StandardUICommand.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/SwipeControl.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/TabView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/TeachingTip.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/TextBlock.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/TextBox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ThemeTransition.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/TimePicker.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/TitleBar.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ToggleButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ToggleSplitButton.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ToggleSwitch.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/ToolTip.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/TreeView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/VariableSizedWrapGrid.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/Viewbox.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/WebView.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/control/XamlUICommand.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/favicon.ico`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/ic_home_github.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/image_huoyin.webp`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/logo_openai.png`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/qrcode_wx.jpg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/image/qrcode_zfb.jpg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_1.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_10.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_11.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_12.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_2.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_3.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_4.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_5.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_6.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_7.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_8.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/avatar_9.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/home.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/res/svg/home_dark.svg`：Fluent UI 示例或组件展示资源。
+- `fluentui/example/src/AppInfo.cpp`：C++/Qt Fluent UI 源文件，负责 `AppInfo` 组件或底层实现。
+- `fluentui/example/src/AppInfo.h`：C++/Qt Fluent UI 源文件，负责 `AppInfo` 组件或底层实现。
+- `fluentui/example/src/controller/ChatController.cpp`：C++/Qt Fluent UI 源文件，负责 `ChatController` 组件或底层实现。
+- `fluentui/example/src/controller/ChatController.h`：C++/Qt Fluent UI 源文件，负责 `ChatController` 组件或底层实现。
+- `fluentui/example/src/lang/En.cpp`：C++/Qt Fluent UI 源文件，负责 `En` 组件或底层实现。
+- `fluentui/example/src/lang/En.h`：C++/Qt Fluent UI 源文件，负责 `En` 组件或底层实现。
+- `fluentui/example/src/lang/Lang.cpp`：C++/Qt Fluent UI 源文件，负责 `Lang` 组件或底层实现。
+- `fluentui/example/src/lang/Lang.h`：C++/Qt Fluent UI 源文件，负责 `Lang` 组件或底层实现。
+- `fluentui/example/src/lang/Zh.cpp`：C++/Qt Fluent UI 源文件，负责 `Zh` 组件或底层实现。
+- `fluentui/example/src/lang/Zh.h`：C++/Qt Fluent UI 源文件，负责 `Zh` 组件或底层实现。
+- `fluentui/example/src/main.cpp`：C++/Qt Fluent UI 源文件，负责 `main` 组件或底层实现。
+- `fluentui/example/src/stdafx.h`：C++/Qt Fluent UI 源文件，负责 `stdafx` 组件或底层实现。
+- `fluentui/example/src/tool/IPC.cpp`：C++/Qt Fluent UI 源文件，负责 `IPC` 组件或底层实现。
+- `fluentui/example/src/tool/IPC.h`：C++/Qt Fluent UI 源文件，负责 `IPC` 组件或底层实现。
+- `fluentui/scripts/windows-mingw-publish.ps1`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `fluentui/scripts/windows-publish.ps1`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `fluentui/src/CMakeLists.txt`：CMake 构建配置，定义 Fluent UI 或示例工程的编译目标。
+- `fluentui/src/Def.cpp`：C++/Qt Fluent UI 源文件，负责 `Def` 组件或底层实现。
+- `fluentui/src/Def.h`：C++/Qt Fluent UI 源文件，负责 `Def` 组件或底层实现。
+- `fluentui/src/FluApp.cpp`：C++/Qt Fluent UI 源文件，负责 `FluApp` 组件或底层实现。
+- `fluentui/src/FluApp.h`：C++/Qt Fluent UI 源文件，负责 `FluApp` 组件或底层实现。
+- `fluentui/src/FluColorSet.cpp`：C++/Qt Fluent UI 源文件，负责 `FluColorSet` 组件或底层实现。
+- `fluentui/src/FluColorSet.h`：C++/Qt Fluent UI 源文件，负责 `FluColorSet` 组件或底层实现。
+- `fluentui/src/FluColors.cpp`：C++/Qt Fluent UI 源文件，负责 `FluColors` 组件或底层实现。
+- `fluentui/src/FluColors.h`：C++/Qt Fluent UI 源文件，负责 `FluColors` 组件或底层实现。
+- `fluentui/src/FluRegister.cpp`：C++/Qt Fluent UI 源文件，负责 `FluRegister` 组件或底层实现。
+- `fluentui/src/FluRegister.h`：C++/Qt Fluent UI 源文件，负责 `FluRegister` 组件或底层实现。
+- `fluentui/src/FluTextStyle.cpp`：C++/Qt Fluent UI 源文件，负责 `FluTextStyle` 组件或底层实现。
+- `fluentui/src/FluTextStyle.h`：C++/Qt Fluent UI 源文件，负责 `FluTextStyle` 组件或底层实现。
+- `fluentui/src/FluTheme.cpp`：C++/Qt Fluent UI 源文件，负责 `FluTheme` 组件或底层实现。
+- `fluentui/src/FluTheme.h`：C++/Qt Fluent UI 源文件，负责 `FluTheme` 组件或底层实现。
+- `fluentui/src/FluTools.cpp`：C++/Qt Fluent UI 源文件，负责 `FluTools` 组件或底层实现。
+- `fluentui/src/FluTools.h`：C++/Qt Fluent UI 源文件，负责 `FluTools` 组件或底层实现。
+- `fluentui/src/NativeEventFilter.cpp`：C++/Qt Fluent UI 源文件，负责 `NativeEventFilter` 组件或底层实现。
+- `fluentui/src/NativeEventFilter.h`：C++/Qt Fluent UI 源文件，负责 `NativeEventFilter` 组件或底层实现。
+- `fluentui/src/WindowHelper.cpp`：C++/Qt Fluent UI 源文件，负责 `WindowHelper` 组件或底层实现。
+- `fluentui/src/WindowHelper.h`：C++/Qt Fluent UI 源文件，负责 `WindowHelper` 组件或底层实现。
+- `fluentui/src/fluentui.rc`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `fluentui/src/imports/FluentUI/Controls/ColorPicker/ColorPicker.qml`：Qt Quick/QML 界面文件，提供 `ColorPicker` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/ColorPicker/Content/Checkerboard.qml`：Qt Quick/QML 界面文件，提供 `Checkerboard` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/ColorPicker/Content/ColorSlider.qml`：Qt Quick/QML 界面文件，提供 `ColorSlider` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/ColorPicker/Content/NumberBox.qml`：Qt Quick/QML 界面文件，提供 `NumberBox` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/ColorPicker/Content/PanelBorder.qml`：Qt Quick/QML 界面文件，提供 `PanelBorder` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/ColorPicker/Content/SBPicker.qml`：Qt Quick/QML 界面文件，提供 `SBPicker` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluAppBar.qml`：Qt Quick/QML 界面文件，提供 `FluAppBar` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluArea.qml`：Qt Quick/QML 界面文件，提供 `FluArea` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluAutoSuggestBox.qml`：Qt Quick/QML 界面文件，提供 `FluAutoSuggestBox` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluBadge.qml`：Qt Quick/QML 界面文件，提供 `FluBadge` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluBreadcrumbBar.qml`：Qt Quick/QML 界面文件，提供 `FluBreadcrumbBar` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluButton.qml`：Qt Quick/QML 界面文件，提供 `FluButton` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluCalendarPicker.qml`：Qt Quick/QML 界面文件，提供 `FluCalendarPicker` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluCalendarView.qml`：Qt Quick/QML 界面文件，提供 `FluCalendarView` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluCarousel.qml`：Qt Quick/QML 界面文件，提供 `FluCarousel` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluCheckBox.qml`：Qt Quick/QML 界面文件，提供 `FluCheckBox` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluColorPicker.qml`：Qt Quick/QML 界面文件，提供 `FluColorPicker` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluColorView.qml`：Qt Quick/QML 界面文件，提供 `FluColorView` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluComboBox.qml`：Qt Quick/QML 界面文件，提供 `FluComboBox` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluContentDialog.qml`：Qt Quick/QML 界面文件，提供 `FluContentDialog` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluContentPage.qml`：Qt Quick/QML 界面文件，提供 `FluContentPage` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluCopyableText.qml`：Qt Quick/QML 界面文件，提供 `FluCopyableText` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluDatePicker.qml`：Qt Quick/QML 界面文件，提供 `FluDatePicker` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluDivider.qml`：Qt Quick/QML 界面文件，提供 `FluDivider` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluDropDownButton.qml`：Qt Quick/QML 界面文件，提供 `FluDropDownButton` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluExpander.qml`：Qt Quick/QML 界面文件，提供 `FluExpander` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluFilledButton.qml`：Qt Quick/QML 界面文件，提供 `FluFilledButton` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluFlipView.qml`：Qt Quick/QML 界面文件，提供 `FluFlipView` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluFocusRectangle.qml`：Qt Quick/QML 界面文件，提供 `FluFocusRectangle` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluIcon.qml`：Qt Quick/QML 界面文件，提供 `FluIcon` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluIconButton.qml`：Qt Quick/QML 界面文件，提供 `FluIconButton` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluInfoBar.qml`：Qt Quick/QML 界面文件，提供 `FluInfoBar` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluItem.qml`：Qt Quick/QML 界面文件，提供 `FluItem` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluItemDelegate.qml`：Qt Quick/QML 界面文件，提供 `FluItemDelegate` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluMediaPlayer.qml`：Qt Quick/QML 界面文件，提供 `FluMediaPlayer` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluMenu.qml`：Qt Quick/QML 界面文件，提供 `FluMenu` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluMenuItem.qml`：Qt Quick/QML 界面文件，提供 `FluMenuItem` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluMultilineTextBox.qml`：Qt Quick/QML 界面文件，提供 `FluMultilineTextBox` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluNavigationView.qml`：Qt Quick/QML 界面文件，提供 `FluNavigationView` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluObject.qml`：Qt Quick/QML 界面文件，提供 `FluObject` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPagination.qml`：Qt Quick/QML 界面文件，提供 `FluPagination` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPaneItem.qml`：Qt Quick/QML 界面文件，提供 `FluPaneItem` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPaneItemEmpty.qml`：Qt Quick/QML 界面文件，提供 `FluPaneItemEmpty` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPaneItemExpander.qml`：Qt Quick/QML 界面文件，提供 `FluPaneItemExpander` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPaneItemHeader.qml`：Qt Quick/QML 界面文件，提供 `FluPaneItemHeader` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPaneItemSeparator.qml`：Qt Quick/QML 界面文件，提供 `FluPaneItemSeparator` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPasswordBox.qml`：Qt Quick/QML 界面文件，提供 `FluPasswordBox` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPivot.qml`：Qt Quick/QML 界面文件，提供 `FluPivot` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluPivotItem.qml`：Qt Quick/QML 界面文件，提供 `FluPivotItem` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluProgressBar.qml`：Qt Quick/QML 界面文件，提供 `FluProgressBar` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluProgressRing.qml`：Qt Quick/QML 界面文件，提供 `FluProgressRing` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluRadioButton.qml`：Qt Quick/QML 界面文件，提供 `FluRadioButton` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluRatingControl.qml`：Qt Quick/QML 界面文件，提供 `FluRatingControl` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluRectangle.qml`：Qt Quick/QML 界面文件，提供 `FluRectangle` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluScrollBar.qml`：Qt Quick/QML 界面文件，提供 `FluScrollBar` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluScrollablePage.qml`：Qt Quick/QML 界面文件，提供 `FluScrollablePage` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluShadow.qml`：Qt Quick/QML 界面文件，提供 `FluShadow` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluSingleton.qml`：Qt Quick/QML 界面文件，提供 `FluSingleton` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluSlider.qml`：Qt Quick/QML 界面文件，提供 `FluSlider` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluStatusView.qml`：Qt Quick/QML 界面文件，提供 `FluStatusView` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTabView.qml`：Qt Quick/QML 界面文件，提供 `FluTabView` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTableView.qml`：Qt Quick/QML 界面文件，提供 `FluTableView` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluText.qml`：Qt Quick/QML 界面文件，提供 `FluText` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTextBox.qml`：Qt Quick/QML 界面文件，提供 `FluTextBox` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTextBoxBackground.qml`：Qt Quick/QML 界面文件，提供 `FluTextBoxBackground` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTextBoxMenu.qml`：Qt Quick/QML 界面文件，提供 `FluTextBoxMenu` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTextButton.qml`：Qt Quick/QML 界面文件，提供 `FluTextButton` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTimePicker.qml`：Qt Quick/QML 界面文件，提供 `FluTimePicker` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluToggleButton.qml`：Qt Quick/QML 界面文件，提供 `FluToggleButton` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluToggleSwitch.qml`：Qt Quick/QML 界面文件，提供 `FluToggleSwitch` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTooltip.qml`：Qt Quick/QML 界面文件，提供 `FluTooltip` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluTreeView.qml`：Qt Quick/QML 界面文件，提供 `FluTreeView` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluWindow.qml`：Qt Quick/QML 界面文件，提供 `FluWindow` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Controls/FluWindowResize.qml`：Qt Quick/QML 界面文件，提供 `FluWindowResize` 控件、页面或窗口。
+- `fluentui/src/imports/FluentUI/Font/Segoe_Fluent_Icons.ttf`：Fluent UI 示例或组件展示资源。
+- `fluentui/src/imports/FluentUI/qmldir`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `fluentui/src/stdafx.h`：C++/Qt Fluent UI 源文件，负责 `stdafx` 组件或底层实现。
+### `根目录/`
+
+- `gui.py`：桌面 GUI 启动入口，负责启动客户端界面。
+### `module/`
+
+- `module/atom/RuleImageMallResourceMixin.py`：Python 模块；主要定义 `RuleImageMallResourceMixin`。
+- `module/atom/animate.py`：Python 模块；主要定义 `RuleAnimate`。
+- `module/atom/cBezier.py`：author: cbb 这个库基于贝塞尔曲线实现模拟人手动滑动的轨迹 可以用于selenium轨迹的模拟，或者生成轨迹数组用于js加密通过网站服务器后端分控检测 QQ群 134064772 里面的人说话好听，个个都是人才；主要定义 `BezierTrajectory`。
+- `module/atom/click.py`：Python 模块；主要定义 `RuleClick, RuleClickExclude`。
+- `module/atom/gif.py`：Python 模块；主要定义 `RuleGif`。
+- `module/atom/image.py`：Python 模块；主要定义 `RuleImage`。
+- `module/atom/image_grid.py`：Python 模块；主要定义 `ImageGrid`。
+- `module/atom/list.py`：Python 模块；主要定义 `RuleList`。
+- `module/atom/long_click.py`：Python 模块；主要定义 `RuleLongClick`。
+- `module/atom/ocr.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `module/atom/scroll.py`：Python 模块；主要定义 `RuleScroll`。
+- `module/atom/swipe.py`：Python 模块；主要定义 `RuleSwipe`。
+- `module/base/__init__.py`：Python 模块。
+- `module/base/cBezier.py`：author: cbb 这个库基于贝塞尔曲线实现模拟人手动滑动的轨迹 可以用于selenium轨迹的模拟，或者生成轨迹数组用于js加密通过网站服务器后端分控检测 QQ群 134064772 里面的人说话好听，个个都是人才 copy from https://github.com/2833844911/gurs；主要定义 `BezierTrajectory`。
+- `module/base/decorator.py`：Python 模块；主要定义 `Config, cached_property, del_cached_property, has_cached_property, function_drop, run_once`。
+- `module/base/filter.py`：Python 模块；主要定义 `Filter`。
+- `module/base/log_highlighter.py`：Python 模块；主要定义 `replace_newline_with_br, highlight_text`。
+- `module/base/protect.py`：Python 模块；主要定义 `random_delay, random_sleep`。
+- `module/base/retry.py`：Python 模块；主要定义 `__retry_internal, retry, retry_call`。
+- `module/base/timer.py`：Python 模块；主要定义 `timer, future_time, past_time, future_time_range, time_range_active, Timer`。
+- `module/base/utils/__init__.py`：Python 模块。
+- `module/base/utils/grids.py`：Python 模块；主要定义 `SelectedGrids, RoadGrids`。
+- `module/base/utils/points.py`：Python 模块；主要定义 `Points, Lines, area2corner, corner2area, corner2inner, corner2outer, trapezoid2area, points_to_area_generator`。
+- `module/base/utils/utils.py`：Python 模块；主要定义 `random_normal_distribution_int, random_rectangle_point, random_rectangle_vector, random_rectangle_vector_opted, random_line_segments, ensure_time, ensure_int, area_offset`。
+- `module/config/anti_ban.py`：防风控作息看守器: 睡眠窗 / 每日活跃上限 / 强制长休息, 由 Script 持有。；主要定义 `AntiBanGuard`。
+- `module/config/argument/args.json`：JSON 数据、元数据或工具输入文件。
+- `module/config/argument/argument.yaml`：任务参数 YAML 配置，定义默认、覆盖或 GUI 参数。
+- `module/config/argument/default.yaml`：任务参数 YAML 配置，定义默认、覆盖或 GUI 参数。
+- `module/config/argument/gui.yaml`：任务参数 YAML 配置，定义默认、覆盖或 GUI 参数。
+- `module/config/argument/menu.json`：JSON 数据、元数据或工具输入文件。
+- `module/config/argument/override.yaml`：任务参数 YAML 配置，定义默认、覆盖或 GUI 参数。
+- `module/config/argument/setting-template.json`：JSON 数据、元数据或工具输入文件。
+- `module/config/argument/task.yaml`：任务参数 YAML 配置，定义默认、覆盖或 GUI 参数。
+- `module/config/atomicwrites.py`：Copy-pasted from https://github.com/untitaker/python-atomicwrites；主要定义 `_path_to_unicode, replace_atomic, move_atomic, AtomicWriter, atomic_write`。
+- `module/config/config.py`：Python 模块；主要定义 `Function, name_to_function, Config`。
+- `module/config/config_manual.py`：Python 模块；主要定义 `ConfigManual`。
+- `module/config/config_menu.py`：Python 模块；主要定义 `ConfigMenu`。
+- `module/config/config_model.py`：Python 模块；主要定义 `ConfigModel`。
+- `module/config/config_modify.py`：Python 模块；主要定义 `ConfigModify`。
+- `module/config/config_server.py`：Python 模块。
+- `module/config/config_state.py`：Python 模块；主要定义 `ConfigState`。
+- `module/config/config_updater.py`：Python 模块；主要定义 `ConfigUpdater`。
+- `module/config/config_watcher.py`：Python 模块；主要定义 `ConfigWatcher`。
+- `module/config/i18n/README.md`：Markdown 项目说明或开发文档。
+- `module/config/i18n/en_US.qm`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/config/i18n/en_US.xml`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/config/i18n/zh_CN.qm`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/config/i18n/zh_CN.xml`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/config/instance_guard.py`：跨进程实例看守器。 通过共享 JSON 状态文件协调多个进程的实例执行顺序，确保同一时间 只有一个实例操作模拟器。持有执行权（token）的实例可执行任务， 其他实例排队等待。；主要定义 `_QueueState, _Heartbeat, InstanceGuard`。
+- `module/config/scheduler.py`：Python 模块；主要定义 `TaskScheduler`。
+- `module/config/server.py`：This file stores server, such as 'cn', 'en'. Use 'import module.config.server as server' to import, don't use 'from xxx import xxx'.；主要定义 `set_server, to_server, to_package`。
+- `module/config/utils.py`：Python 模块；主要定义 `filepath_config, filepath_args, filepath_argument, read_file, write_file, deep_iter, server_timezone, server_time_offset`。
+- `module/daemon/benchmark.py`：Python 模块；主要定义 `float2str, Benchmark`。
+- `module/daemon/daemon_base.py`：Python 模块；主要定义 `DaemonBase`。
+- `module/device/app_control.py`：Python 模块；主要定义 `AppControl`。
+- `module/device/connection.py`：Python 模块；主要定义 `retry, AdbDeviceWithStatus, Connection`。
+- `module/device/connection_attr.py`：Python 模块；主要定义 `ConnectionAttr`。
+- `module/device/control.py`：Python 模块；主要定义 `Control`。
+- `module/device/device.py`：Python 模块；主要定义 `Device`。
+- `module/device/emulator.py`：Python 模块；主要定义 `EmulatorInstance, Bluestacks5Instance, EmulatorManager`。
+- `module/device/env.py`：Python 模块。
+- `module/device/handle.py`：Python 模块；主要定义 `handle_title2num, handle_num2title, is_handle_valid, handle_num2pid, window_scale_rate, WindowNode, EmulatorFamily, Handle`。
+- `module/device/method/adb.py`：Python 模块；主要定义 `retry, load_screencap, Adb`。
+- `module/device/method/droidcast.py`：Python 模块；主要定义 `DroidCastVersionIncompatible, retry, DroidCast`。
+- `module/device/method/minitouch.py`：Python 模块；主要定义 `random_normal_distribution, random_theta, random_rho, insert_swipe, smooth_path, Command, CommandBuilder, MinitouchNotInstalledError`。
+- `module/device/method/nemu_ipc.py`：Python 模块；主要定义 `NemuIpcIncompatible, NemuIpcError, CaptureStd, CaptureNemuIpc, retry, NemuIpcImpl, serial_to_id, NemuIpc`。
+- `module/device/method/scrcpy/__init__.py`：Python 模块。
+- `module/device/method/scrcpy/const.py`：This module includes all consts used in this project。
+- `module/device/method/scrcpy/control.py`：Python 模块；主要定义 `inject, ControlSender`。
+- `module/device/method/scrcpy/core.py`：Python 模块；主要定义 `ScrcpyError, ScrcpyCore`。
+- `module/device/method/scrcpy/options.py`：Python 模块；主要定义 `ScrcpyOptions`。
+- `module/device/method/scrcpy/scrcpy.py`：Python 模块；主要定义 `retry, Scrcpy`。
+- `module/device/method/uiautomator_2.py`：Python 模块；主要定义 `retry, ProcessInfo, ShellBackgroundResponse, Uiautomator2`。
+- `module/device/method/utils.py`：Python 模块；主要定义 `is_port_using, random_port, recv_all, possible_reasons, PackageNotInstalled, ImageTruncated, retry_sleep, handle_adb_error`。
+- `module/device/method/windows.py`：Python 模块。
+- `module/device/method/windows_impl.py`：Python 模块；主要定义 `Window`。
+- `module/device/pkg_resources/__init__.py`：Python 模块；主要定义 `remove_suffix, FakeDistributionObject, PackageCache, resource_filename, get_distribution, DistributionNotFound`。
+- `module/device/platform2/__init__.py`：Python 模块。
+- `module/device/platform2/emulator_base.py`：Python 模块；主要定义 `abspath, get_serial_pair, remove_duplicated_path, EmulatorInstanceBase, EmulatorBase, EmulatorManagerBase`。
+- `module/device/platform2/emulator_windows.py`：Python 模块；主要定义 `RegValue, list_reg, list_key, abspath, EmulatorInstance, Emulator, EmulatorManager`。
+- `module/device/platform2/platform_base.py`：Python 模块；主要定义 `EmulatorInfo, PlatformBase, serial_to_id`。
+- `module/device/platform2/platform_windows.py`：Python 模块；主要定义 `EmulatorUnknown, minimize_by_name, find_hwnd_by_name, show_window_by_name, get_focused_window, set_focus_window, minimize_window, get_window_title`。
+- `module/device/platform2/utils.py`：Python 模块；主要定义 `cached_property, iter_folder`。
+- `module/device/screenshot.py`：Python 模块；主要定义 `Screenshot`。
+- `module/exception.py`：Python 模块；主要定义 `CampaignEnd, MapDetectionError, MapWalkError, MapEnemyMoved, CampaignNameError, ScriptError, ScriptEnd, GameStuckError`。
+- `module/gui/Bridge.py`：Python 模块；主要定义 `Bridge`。
+- `module/gui/FluentUI/Font/Segoe_Fluent_Icons.ttf`：二进制、图像、字体或图标资源。
+- `module/gui/FluentUI/fluentui.qmltypes`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/gui/FluentUI/fluentuiplugin.dll`：二进制、图像、字体或图标资源。
+- `module/gui/FluentUI/fluentuiplugin.qmltypes`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/gui/FluentUI/qmldir`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/gui/README.md`：Markdown 项目说明或开发文档。
+- `module/gui/context/add.py`：Python 模块；主要定义 `Add`。
+- `module/gui/context/process_manager.py`：Python 模块；主要定义 `is_port_in_use, ProcessManager`。
+- `module/gui/context/settings.py`：Python 模块；主要定义 `Setting`。
+- `module/gui/context/utils.py`：Python 模块；主要定义 `Utils`。
+- `module/gui/fluent_app.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `module/gui/oas.pyproject`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/gui/process/script_process.py`：Python 模块；主要定义 `ScriptProcess`。
+- `module/gui/qml.qrc`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/gui/qml/Component/Add.qml`：Qt Quick/QML 界面文件，提供 `Add` 控件、页面或窗口。
+- `module/gui/qml/Component/Args.qml`：Qt Quick/QML 界面文件，提供 `Args` 控件、页面或窗口。
+- `module/gui/qml/Component/FComboBox.qml`：Qt Quick/QML 界面文件，提供 `FComboBox` 控件、页面或窗口。
+- `module/gui/qml/Component/FItemDelegate.qml`：Qt Quick/QML 界面文件，提供 `FItemDelegate` 控件、页面或窗口。
+- `module/gui/qml/Component/FluDialog.qml`：Qt Quick/QML 界面文件，提供 `FluDialog` 控件、页面或窗口。
+- `module/gui/qml/Component/MirrorImage.qml`：Qt Quick/QML 界面文件，提供 `MirrorImage` 控件、页面或窗口。
+- `module/gui/qml/Component/ModelParse.js`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/gui/qml/Component/Notity.qml`：Qt Quick/QML 界面文件，提供 `Notity` 控件、页面或窗口。
+- `module/gui/qml/Component/OverStatus.qml`：Qt Quick/QML 界面文件，提供 `OverStatus` 控件、页面或窗口。
+- `module/gui/qml/Component/Overview.qml`：Qt Quick/QML 界面文件，提供 `Overview` 控件、页面或窗口。
+- `module/gui/qml/Component/ResizableRectangle.qml`：Qt Quick/QML 界面文件，提供 `ResizableRectangle` 控件、页面或窗口。
+- `module/gui/qml/Component/RuleFile.qml`：Qt Quick/QML 界面文件，提供 `RuleFile` 控件、页面或窗口。
+- `module/gui/qml/Component/RuleFile2.qml`：Qt Quick/QML 界面文件，提供 `RuleFile2` 控件、页面或窗口。
+- `module/gui/qml/Component/RunStatusIcon.qml`：Qt Quick/QML 界面文件，提供 `RunStatusIcon` 控件、页面或窗口。
+- `module/gui/qml/Component/ScriptItem.qml`：Qt Quick/QML 界面文件，提供 `ScriptItem` 控件、页面或窗口。
+- `module/gui/qml/Component/SplitPanel.qml`：Qt Quick/QML 界面文件，提供 `SplitPanel` 控件、页面或窗口。
+- `module/gui/qml/Component/Taskmini.qml`：Qt Quick/QML 界面文件，提供 `Taskmini` 控件、页面或窗口。
+- `module/gui/qml/Content/ClickRule.qml`：Qt Quick/QML 界面文件，提供 `ClickRule` 控件、页面或窗口。
+- `module/gui/qml/Content/ImageRule.qml`：Qt Quick/QML 界面文件，提供 `ImageRule` 控件、页面或窗口。
+- `module/gui/qml/Content/ListRule.qml`：Qt Quick/QML 界面文件，提供 `ListRule` 控件、页面或窗口。
+- `module/gui/qml/Content/LongClickRule.qml`：Qt Quick/QML 界面文件，提供 `LongClickRule` 控件、页面或窗口。
+- `module/gui/qml/Content/NotifyTest.qml`：Qt Quick/QML 界面文件，提供 `NotifyTest` 控件、页面或窗口。
+- `module/gui/qml/Content/OcrRule.qml`：Qt Quick/QML 界面文件，提供 `OcrRule` 控件、页面或窗口。
+- `module/gui/qml/Content/SwipeRule.qml`：Qt Quick/QML 界面文件，提供 `SwipeRule` 控件、页面或窗口。
+- `module/gui/qml/Content/TaskList.qml`：Qt Quick/QML 界面文件，提供 `TaskList` 控件、页面或窗口。
+- `module/gui/qml/Global/ItemsFooter.qml`：Qt Quick/QML 界面文件，提供 `ItemsFooter` 控件、页面或窗口。
+- `module/gui/qml/Global/ItemsOriginal.qml`：Qt Quick/QML 界面文件，提供 `ItemsOriginal` 控件、页面或窗口。
+- `module/gui/qml/Global/MainEvent.qml`：Qt Quick/QML 界面文件，提供 `MainEvent` 控件、页面或窗口。
+- `module/gui/qml/Global/qmldir`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/gui/qml/MainWindow.qml`：Qt Quick/QML 界面文件，提供 `MainWindow` 控件、页面或窗口。
+- `module/gui/qml/Page/Home.qml`：Qt Quick/QML 界面文件，提供 `Home` 控件、页面或窗口。
+- `module/gui/qml/Page/O_Add.qml`：Qt Quick/QML 界面文件，提供 `O_Add` 控件、页面或窗口。
+- `module/gui/qml/Page/O_Home.qml`：Qt Quick/QML 界面文件，提供 `O_Home` 控件、页面或窗口。
+- `module/gui/qml/Page/O_Settings.qml`：Qt Quick/QML 界面文件，提供 `O_Settings` 控件、页面或窗口。
+- `module/gui/qml/Page/ScriptView.qml`：Qt Quick/QML 界面文件，提供 `ScriptView` 控件、页面或窗口。
+- `module/gui/qml/Page/Update.qml`：Qt Quick/QML 界面文件，提供 `Update` 控件、页面或窗口。
+- `module/gui/qml/app.qml`：Qt Quick/QML 界面文件，提供 `app` 控件、页面或窗口。
+- `module/gui/qml_rc.py`：Python 模块；主要定义 `qInitResources, qCleanupResources`。
+- `module/gui/qml_rcc.py`：Python 模块；主要定义 `qInitResources, qCleanupResources`。
+- `module/gui/register_type/paint_image.py`：Python 模块；主要定义 `PaintImage`。
+- `module/gui/register_type/rule_file.py`：Python 模块；主要定义 `RuleFile`。
+- `module/gui/res.qrc`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/gui/res/exclamation-triangle-fill.svg`：二进制、图像、字体或图标资源。
+- `module/gui/res/icon.ico`：二进制、图像、字体或图标资源。
+- `module/gui/res/icon.png`：二进制、图像、字体或图标资源。
+- `module/gui/res/logo.ico`：二进制、图像、字体或图标资源。
+- `module/gui/res_rc.py`：Python 模块；主要定义 `qInitResources, qCleanupResources`。
+- `module/gui/res_rcc.py`：Python 模块；主要定义 `qInitResources, qCleanupResources`。
+- `module/gui/utils.py`：Python 模块；主要定义 `get_work_path, is_admin, check_admin`。
+- `module/handler/sensitive_info.py`：Python 模块；主要定义 `handle_sensitive_image, handle_sensitive_text, handle_sensitive_logs`。
+- `module/logger.py`：Python 模块；主要定义 `cleanup_logs, empty_function, RichFileHandler, set_file_logger, FlutterHandler, FlutterConsole, FlutterLogStream, set_func_logger`。
+- `module/map/map_grids.py`：Python 模块；主要定义 `SelectedGrids, RoadGrids`。
+- `module/notify/notify.py`：Python 模块；主要定义 `Notifier`。
+- `module/ocr/base_ocr.py`：Python 模块；主要定义 `enlarge_canvas, OcrMode, OcrMethod, BaseCor`。
+- `module/ocr/models.py`：Python 模块；主要定义 `OcrModel, get_ocr_model`。
+- `module/ocr/ppocr.py`：Python 模块；主要定义 `TextSystem, sorted_boxes`。
+- `module/ocr/rpc.py`：Python 模块；主要定义 `_normalize_address, _split_host_port, _is_port_in_use, ensure_ocr_server_started, shutdown_ocr_server, run_ocr_server, OcrServer, ModelProxy`。
+- `module/ocr/sub_ocr.py`：Python 模块；主要定义 `Full, Single, Digit, DigitCounter, Duration, Quantity`。
+- `module/ocr/utils.py`：Python 模块；主要定义 `_merge_area, merge_area`。
+- `module/server/__init__.py`：Python 模块。
+- `module/server/annotator_rule_schema.py`：Python 模块；主要定义 `get_rule_types, get_rule_schema, get_rule_schemas, get_schema_payload, _field_defaults, default_rule, default_list_meta, merge_rule_with_defaults`。
+- `module/server/app.py`：Python 模块；主要定义 `lifespan, NoCacheStaticFiles, on_startup, on_shutdown, global_exception_handler, fastapi_app`。
+- `module/server/config.py`：Copy from https://github.com/LmeSzinc/AzurLaneAutoScript；主要定义 `poor_yaml_read_with_lock, poor_yaml_write_with_lock, DeployConfig`。
+- `module/server/config_manager.py`：Python 模块；主要定义 `ConfigManager`。
+- `module/server/diagnostic.py`：导出脱敏后的配置摘要与最近日志为 zip，用于风控对照分析。不导出账号/token/密码。；主要定义 `_scrub, _config_summary, _recent_files, build_diagnostic_zip`。
+- `module/server/home_router.py`：Python 模块；主要定义 `home_test, home_menu, notify_test, kill_server, update_info, execute_update, chinese_translate, additional_translate`。
+- `module/server/i18n.py`：Python 模块；主要定义 `Addition, I18n`。
+- `module/server/main_manager.py`：Python 模块；主要定义 `MainManager`。
+- `module/server/script_process.py`：Python 模块；主要定义 `ScriptState, ScriptProcess, func`。
+- `module/server/script_router.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `module/server/script_websocket.py`：Python 模块；主要定义 `ScriptWSManager`。
+- `module/server/setting.py`：Copy from https://github.com/LmeSzinc/AzurLaneAutoScript；主要定义 `cached_class_property, State`。
+- `module/server/tool.py`：Python 模块；主要定义 `AnnotatorError, SessionImage, EmulatorCaptureSession, AnnotatorSession, AnnotatorManager`。
+- `module/server/tool_router.py`：Python 模块；主要定义 `EmulatorStartBody, SessionBody, RuleSaveBody, UploadImageItem, UploadImagesBody, BatchDeleteImagesBody, CropSaveBody, RuleImageDeleteBody`。
+- `module/server/updater.py`：Python 模块；主要定义 `Updater`。
+- `module/server/web/annotator/index.html`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/css/base.css`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/css/center-panel.css`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/css/left-window.css`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/css/right-window.css`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/css/topbar.css`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/js/app.js`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/js/center-panel.js`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/js/layout-ui.js`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/js/left-window.js`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/js/main.js`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/js/right-window.js`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/js/topbar.js`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/widget/center-panel.html`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/widget/component-manifest.md`：Markdown 项目说明或开发文档。
+- `module/server/web/annotator/static/widget/left-window.html`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/widget/right-window.html`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/server/web/annotator/static/widget/topbar.html`：项目辅助文件，具体用途由所在目录和引用关系决定。
+- `module/team_flow/host.py`：Python 模块；主要定义 `on_message, Host`。
+- `module/team_flow/mqtt.py`：Python 模块；主要定义 `on_message, Mqtt`。
+- `module/team_flow/mqtt_test.py`：Python 模块；主要定义 `connect_mqtt, subscribe, publish, on_message, run`。
+- `module/team_flow/player.py`：Python 模块；主要定义 `Player`。
+- `module/team_flow/task.py`：Python 模块；主要定义 `Task, t_diff`。
+### `根目录/`
+
+- `requirements-in.txt`：用于生成依赖清单的输入依赖，按图像、设备、OCR、Web 等类别组织。
+- `requirements.txt`：完整运行环境的 Python 依赖锁定清单。
+- `script.py`：主任务调度入口：解析参数、加载配置并启动任务执行流程。
+- `server.py`：Web 服务启动入口：解析服务参数并运行 FastAPI/Uvicorn。
+### `tasks/`
+
+- `tasks/AbyssShadows/assets.py`：Python 模块；主要定义 `AbyssShadowsAssets`。
+- `tasks/AbyssShadows/config.py`：Python 模块；主要定义 `AbyssShadowsTime, AbyssShadowsCombatTime, AbyssShadows`。
+- `tasks/AbyssShadows/res/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/AbyssShadows/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/AbyssShadows/res/list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/AbyssShadows/res/res_abyss_dragon.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_fox.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_goto_enemy.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_leopard.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_map.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_map_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_navigation.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_peacock.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_shadows.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_abyss_shiki.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_change_area.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_dragon_area.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_ensure_button.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_equipping.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_fox_area.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_is_attack.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_leopard_area.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_open_abyss_shadows_abyss.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_peacock_area.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_ryou_shenshe.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_to_abyss_shadows.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/res_wait_to_start.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/scene_ryou.png`：二进制、图像、字体或图标资源。
+- `tasks/AbyssShadows/res/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/AbyssShadows/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/ActivityShikigami/README.md`：Markdown 项目说明或开发文档。
+- `tasks/ActivityShikigami/as/as_back_green.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_battle_main_to_records.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_check_battle_boss.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_check_battle_main.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_check_boss.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_climb_mode_ap.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_climb_mode_pass.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_climb_mode_switch.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_confirm_skip.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_red_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_shi.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_skip_button.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_to_battle_boss.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_to_battle_main.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_to_battle_main_2.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/as_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/as/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/ActivityShikigami/as/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/ActivityShikigami/as/pages.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/ActivityShikigami/assets.py`：Python 模块；主要定义 `ActivityShikigamiAssets`。
+- `tasks/ActivityShikigami/config.py`：Python 模块；主要定义 `check_soul_by_number, check_soul_by_ocr, SwitchSoulConfig, GeneralBattleConfig, ActivityShikigami`。
+- `tasks/ActivityShikigami/fire/fire_pass12.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_1.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_13.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_2.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_3.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_4.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_5.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_6.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_7.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/fire_pass_9.png`：二进制、图像、字体或图标资源。
+- `tasks/ActivityShikigami/fire/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/ActivityShikigami/fire/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/ActivityShikigami/page.py`：Python 模块。
+- `tasks/ActivityShikigami/script_task.py`：Python 模块；主要定义 `_prepare_image_for_ocr, LimitTimeOut, LimitCountOut, StateMachine, ScriptTask`。
+- `tasks/ActivityShikigami/script_test.py`：Python 模块；主要定义 `ImplScriptTask, ScriptTest`。
+- `tasks/AreaBoss/assets.py`：Python 模块；主要定义 `AreaBossAssets`。
+- `tasks/AreaBoss/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/AreaBoss/config.py`：Python 模块；主要定义 `AreaBoss`。
+- `tasks/AreaBoss/config_boss.py`：Python 模块；主要定义 `AreaBossFloor, Boss`。
+- `tasks/AreaBoss/res/ab_difficulty_ji.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_difficulty_normal.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_filter_opened.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_filter_title_collection.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_filter_title_famous.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_filter_title_reward.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_ji_floor_list_check.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_ji_floor_one.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_ji_floor_ten.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_level_60.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_level_handle.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_num_challenge_rail.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/ab_rank_none.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/AreaBoss/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/AreaBoss/res/res_ab_close_red.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_area_boss.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_back_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_battle_1.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_battle_2.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_battle_3.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_close_red.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_explore.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_filter.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/res/res_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/AreaBoss/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/AreaBoss/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/AutoCheckinBigGod/assets.py`：Python 模块；主要定义 `AutoCheckinBigGodAssets`。
+- `tasks/AutoCheckinBigGod/config.py`：Python 模块；主要定义 `CheckinBigGodConfig, AutoCheckinBigGod`。
+- `tasks/AutoCheckinBigGod/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/BondlingFairyland/assets.py`：Python 模块；主要定义 `BondlingFairylandAssets`。
+- `tasks/BondlingFairyland/ball/ball_ball_area.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ball/ball_ball_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ball/ball_ball_help.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ball/ball_ball_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ball/ball_ball_records.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ball/ball_ball_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ball/ball_check_area.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ball/ball_create_team.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ball/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/ball/room_team.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/battle.py`：Python 模块；主要定义 `BondlingBattle`。
+- `tasks/BondlingFairyland/bf/bf_bf_local_1_azure_basan.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_local_1_one.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_local_2_snowball.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_local_3_little_kuro.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_local_4_none.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_local_5_little_kuro.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_local_5_tomb_guard.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_records.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_searsh.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_store.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/bf_bf_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/bf/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/capture/battle_fail.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/battle_fail_abandon.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/battle_success.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/capture/capture_azure_basan.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_auto_false.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_auto_true.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_continuous_disable.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_continuous_enable.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_first_disable.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_first_enable.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_high_false.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_high_true.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_low_false.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_low_true.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_midum_false.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_midum_true.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_minimal_mode_disable.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_c_minimal_mode_enable.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_cap_again.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_cap_failure.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_cap_success.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_caption_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_click_caption.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_little_kuro.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_snowball.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/capture_tomb_guard.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/capture/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/config.py`：Python 模块；主要定义 `BondlingMode, BondlingClass, UserStatus, BondlingConfig, BondlingSwitchSoul, BondlingFairyland`。
+- `tasks/BondlingFairyland/config_battle.py`：Python 模块；主要定义 `BattleConfig`。
+- `tasks/BondlingFairyland/general_invite.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/BondlingFairyland/invite/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/invite/select_friend_off.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/invite/select_friend_on.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/invite/select_kuaqu_off.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/invite/select_kuaqu_on.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/BondlingFairyland/stone/buy_add.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/stone/buy_plus.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/stone/buy_sub.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/stone/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/stone/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BondlingFairyland/stone/stone_stone_close.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/stone/stone_stone_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/BondlingFairyland/stone/stone_stone_sure.png`：二进制、图像、字体或图标资源。
+- `tasks/BudokaiTournament/assets.py`：Python 模块；主要定义 `BudokaiTournamentAssets`。
+- `tasks/BudokaiTournament/bt/bt_img1.png`：二进制、图像、字体或图标资源。
+- `tasks/BudokaiTournament/bt/bt_img2.png`：二进制、图像、字体或图标资源。
+- `tasks/BudokaiTournament/bt/bt_img3.png`：二进制、图像、字体或图标资源。
+- `tasks/BudokaiTournament/bt/bt_img4.png`：二进制、图像、字体或图标资源。
+- `tasks/BudokaiTournament/bt/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BudokaiTournament/bt/page.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/BudokaiTournament/config.py`：Python 模块；主要定义 `DailyTraining, SwitchSoulConfig, GeneralBattleConfig, BudokaiTournament`。
+- `tasks/BudokaiTournament/script_task.py`：Python 模块；主要定义 `LimitTimeOut, LimitCountOut, StateMachine, Foot, ScriptTask`。
+- `tasks/CollectiveMissions/assets.py`：Python 模块；主要定义 `CollectiveMissionsAssets`。
+- `tasks/CollectiveMissions/cm/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/cm/cm_cm_add_1.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_add_2.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_add_3.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_add_4.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_cm.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_matter.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_present.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_records.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_rewards.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_shrine.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/cm_cm_switch.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/cm/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/cm/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/cm/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/config.py`：Python 模块；主要定义 `MissionsConfig, CollectiveMissions`。
+- `tasks/CollectiveMissions/feed/feed.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/feed/feed_click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/feed/feed_feed_heap.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/feed/feed_feed_submit.png`：二进制、图像、字体或图标资源。
+- `tasks/CollectiveMissions/script_task.py`：Python 模块；主要定义 `MC, ScriptTask`。
+- `tasks/CollectiveMissions/soul/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/soul/long_click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/soul/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/CollectiveMissions/soul/soul_sl_submit.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/BaseActivity/assets.py`：Python 模块；主要定义 `BaseActivityAssets`。
+- `tasks/Component/BaseActivity/base_activity.py`：Python 模块；主要定义 `BaseActivity`。
+- `tasks/Component/BaseActivity/config_activity.py`：Python 模块；主要定义 `ApMode, GeneralClimb`。
+- `tasks/Component/Buy/assets.py`：Python 模块；主要定义 `BuyAssets`。
+- `tasks/Component/Buy/buy.py`：Python 模块；主要定义 `Buy`。
+- `tasks/Component/Buy/buy/buy_buy_add.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Buy/buy/buy_buy_plus.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Buy/buy/buy_buy_rmb.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Buy/buy/buy_buy_sub.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Buy/buy/buy_buy_success.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Buy/buy/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Buy/buy/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Buy/buy/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/README.md`：Markdown 项目说明或开发文档。
+- `tasks/Component/Costume/assets.py`：Python 模块；主要定义 `CostumeAssets`。
+- `tasks/Component/Costume/config.py`：Python 模块；主要定义 `MainType, RealmType, CarpBannerType, ThemeType, ShikigamiType, SignType, BattleType, BattleSceneType`。
+- `tasks/Component/Costume/costume_base.py`：Python 模块；主要定义 `CostumeBase`。
+- `tasks/Component/Costume/costume_test.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Component/Costume/costume_test_realm.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Component/Costume/costume_test_shikigami.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Component/Costume/main1/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main1/image_name.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main1/main1_check_main_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main1/main1_main_goto_exploration_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main1/main1_main_goto_summon_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main1/main1_main_goto_town_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main1/main1_pet_house_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main10/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main10/main10_check_main_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main10/main10_main_goto_exploration_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main10/main10_main_goto_summon_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main10/main10_main_goto_town_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main10/main10_pet_house_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main11/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main11/main11_check_main_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main11/main11_main_goto_exploration_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main11/main11_main_goto_summon_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main11/main11_main_goto_town_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main11/main11_pet_house_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main12/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main12/main12_check_main_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main12/main12_main_goto_exploration_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main12/main12_main_goto_summon_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main12/main12_main_goto_town_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main12/main12_pet_house_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main13/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main13/main13_check_main_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main13/main13_main_goto_exploration_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main13/main13_main_goto_summon_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main13/main13_main_goto_town_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main13/main13_pet_house_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main14/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main14/main14_check_main_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main14/main14_main_goto_exploration_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main14/main14_main_goto_summon_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main14/main14_main_goto_town_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main14/main14_pet_house_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main15/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main15/main15_check_main_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main15/main15_main_goto_exploration_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main15/main15_main_goto_summon_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main15/main15_main_goto_town_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main15/main15_pet_house_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main16/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main16/main16_check_main_16.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main16/main16_main_goto_exploration_16.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main16/main16_main_goto_summon_16.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main16/main16_main_goto_town_16.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main16/main16_pet_house_16.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main17/main17_check_main_17_a.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_check_main_17_b.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_check_main_17_c.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_exploration_17_a.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_exploration_17_b.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_exploration_17_c.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_summon_17_a.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_summon_17_b.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_summon_17_c.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_town_17_a.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_town_17_b.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_main_goto_town_17_c.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_pet_house_17_a.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_pet_house_17_b.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main17/main17_pet_house_17_c.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main2/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main2/main2_check_main_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main2/main2_main_goto_exploration_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main2/main2_main_goto_summon_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main2/main2_main_goto_town_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main2/main2_pet_house_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main3/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main3/main3_check_main_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main3/main3_main_goto_exploration_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main3/main3_main_goto_summon_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main3/main3_main_goto_town_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main3/main3_pet_house_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main4/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main4/main4_check_main_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main4/main4_main_goto_exploration_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main4/main4_main_goto_summon_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main4/main4_main_goto_town_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main4/main4_pet_house_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main5/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main5/main5_check_main_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main5/main5_main_goto_exploration_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main5/main5_main_goto_summon_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main5/main5_main_goto_town_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main5/main5_pet_house_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main6/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main6/main6_check_main_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main6/main6_main_goto_exploration_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main6/main6_main_goto_summon_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main6/main6_main_goto_town_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main6/main6_pet_house_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main7/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main7/main7_check_main_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main7/main7_main_goto_exploration_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main7/main7_main_goto_summon_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main7/main7_main_goto_town_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main7/main7_pet_house_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main8/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main8/main8_check_main_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main8/main8_main_goto_exploration_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main8/main8_main_goto_summon_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main8/main8_main_goto_town_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main8/main8_pet_house_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main9/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Costume/main9/main9_check_main_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main9/main9_main_goto_exploration_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main9/main9_main_goto_summon_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main9/main9_main_goto_town_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Costume/main9/main9_pet_house_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/assets.py`：Python 模块；主要定义 `CostumeBattleAssets`。
+- `tasks/Component/CostumeBattle/battle1/battle1_battle_info_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle1/battle1_exit_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle1/battle1_friends_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle1/battle1_local_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle1/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle10/battle10_battle_info_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle10/battle10_exit_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle10/battle10_friends_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle10/battle10_local_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle10/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle11/battle11_battle_info_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle11/battle11_exit_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle11/battle11_friends_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle11/battle11_local_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle11/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle12/battle12_battle_info_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle12/battle12_de_win_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle12/battle12_exit_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle12/battle12_false_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle12/battle12_friends_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle12/battle12_local_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle12/battle12_win_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle12/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle13/battle13_battle_info_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle13/battle13_de_win_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle13/battle13_exit_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle13/battle13_false_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle13/battle13_friends_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle13/battle13_local_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle13/battle13_win_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle13/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle14/battle14_battle_info_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle14/battle14_de_win_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle14/battle14_exit_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle14/battle14_false_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle14/battle14_friends_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle14/battle14_local_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle14/battle14_win_14.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle14/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle15/battle15_battle_info_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle15/battle15_de_win_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle15/battle15_exit_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle15/battle15_false_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle15/battle15_friends_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle15/battle15_local_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle15/battle15_win_15.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle15/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle2/battle2_battle_info_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle2/battle2_exit_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle2/battle2_friends_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle2/battle2_local_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle2/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle3/battle3_battle_info_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle3/battle3_exit_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle3/battle3_friends_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle3/battle3_local_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle3/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle4/battle4_battle_info_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle4/battle4_exit_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle4/battle4_friends_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle4/battle4_local_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle4/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle5/battle5_battle_info_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle5/battle5_exit_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle5/battle5_friends_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle5/battle5_local_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle5/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle6/battle6_battle_info_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle6/battle6_exit_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle6/battle6_friends_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle6/battle6_local_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle6/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle7/battle7_battle_info_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle7/battle7_exit_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle7/battle7_friends_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle7/battle7_local_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle7/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle8/battle8_battle_info_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle8/battle8_de_win_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle8/battle8_exit_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle8/battle8_false_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle8/battle8_friends_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle8/battle8_local_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle8/battle8_win_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle8/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/battle9/battle9_battle_info_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle9/battle9_exit_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle9/battle9_friends_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle9/battle9_local_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattle/battle9/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeBattle/costume_test_battle.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Component/CostumeBattleScene/assets.py`：Python 模块；主要定义 `CostumeBattleSceneAssets`。
+- `tasks/Component/CostumeBattleScene/bs1/bs1_reward_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeBattleScene/bs1/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeCarpBanner/assets.py`：Python 模块；主要定义 `CostumeCarpBannerAssets`。
+- `tasks/Component/CostumeCarpBanner/cb1/cb1_shi_card_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb1/cb1_shi_defense_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb1/cb1_shi_grown_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb1/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeCarpBanner/cb2/cb2_shi_card_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb2/cb2_shi_defense_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb2/cb2_shi_grown_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb2/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeCarpBanner/cb3/cb3_shi_card_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb3/cb3_shi_defense_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb3/cb3_shi_grown_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeCarpBanner/cb3/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeRealm/assets.py`：Python 模块；主要定义 `CostumeRealmAssets`。
+- `tasks/Component/CostumeShikigami/README.md`：Markdown 项目说明或开发文档。
+- `tasks/Component/CostumeShikigami/assets.py`：Python 模块；主要定义 `CostumeShikigamiAssets`。
+- `tasks/Component/CostumeShikigami/sk1/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk1/sk1_check_records_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_record_soul_back_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_check_group_1_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_check_group_2_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_check_group_3_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_check_group_4_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_check_group_5_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_check_group_6_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_check_group_7_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_check_in_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_click_present_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_switch_1_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_switch_2_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_switch_3_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_switch_4_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_sou_team_present_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_soul_preset_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_st_replace_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk1/sk1_st_souls_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk10/sk10_check_records_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_record_soul_back_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_check_group_1_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_check_group_2_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_check_group_3_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_check_group_4_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_check_group_5_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_check_group_6_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_check_group_7_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_check_in_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_click_present_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_switch_1_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_switch_2_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_switch_3_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_switch_4_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_sou_team_present_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_soul_preset_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_st_replace_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk10/sk10_st_souls_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk11/sk11_check_records_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_record_soul_back_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_check_group_1_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_check_group_2_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_check_group_3_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_check_group_4_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_check_group_5_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_check_group_6_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_check_group_7_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_check_in_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_click_present_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_switch_1_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_switch_2_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_switch_3_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_switch_4_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_sou_team_present_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_soul_preset_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_st_replace_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk11/sk11_st_souls_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk12/sk12_check_records_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_record_soul_back_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_check_group_1_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_check_group_2_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_check_group_3_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_check_group_4_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_check_group_5_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_check_group_6_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_check_group_7_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_check_in_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_click_present_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_switch_1_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_switch_2_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_switch_3_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_switch_4_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_sou_team_present_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_soul_preset_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_st_replace_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk12/sk12_st_souls_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk2/sk2_check_records_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_record_soul_back_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_check_group_1_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_check_group_2_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_check_group_3_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_check_group_4_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_check_group_5_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_check_group_6_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_check_group_7_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_check_in_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_click_present_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_switch_1_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_switch_2_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_switch_3_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_switch_4_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_sou_team_present_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_soul_preset_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_st_replace_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk2/sk2_st_souls_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk3/sk3_check_records_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_record_soul_back_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_check_group_1_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_check_group_2_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_check_group_3_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_check_group_4_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_check_group_5_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_check_group_6_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_check_group_7_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_check_in_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_click_present_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_switch_1_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_switch_2_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_switch_3_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_switch_4_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_sou_team_present_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_soul_preset_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_st_replace_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk3/sk3_st_souls_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk4/sk4_check_records_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_record_soul_back_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_check_group_1_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_check_group_2_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_check_group_3_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_check_group_4_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_check_group_5_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_check_group_6_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_check_group_7_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_check_in_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_click_present_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_switch_1_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_switch_2_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_switch_3_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_switch_4_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_sou_team_present_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_soul_preset_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_st_replace_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk4/sk4_st_souls_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk5/sk5_check_records_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_record_soul_back_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_check_group_1_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_check_group_2_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_check_group_3_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_check_group_4_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_check_group_5_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_check_group_6_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_check_group_7_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_check_in_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_click_present_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_switch_1_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_switch_2_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_switch_3_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_switch_4_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_sou_team_present_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_soul_preset_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_st_replace_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk5/sk5_st_souls_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk6/sk6_check_records_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_record_soul_back_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_check_group_1_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_check_group_2_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_check_group_3_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_check_group_4_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_check_group_5_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_check_group_6_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_check_group_7_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_check_in_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_click_present_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_switch_1_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_switch_2_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_switch_3_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_switch_4_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_sou_team_present_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_soul_preset_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_st_replace_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk6/sk6_st_souls_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk7/sk7_check_records_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_record_soul_back_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_check_group_1_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_check_group_2_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_check_group_3_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_check_group_4_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_check_group_5_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_check_group_6_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_check_group_7_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_check_in_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_click_present_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_switch_1_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_switch_2_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_switch_3_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_switch_4_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_sou_team_present_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_soul_preset_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_st_replace_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk7/sk7_st_souls_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk8/sk8_check_records_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_record_soul_back_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_check_group_1_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_check_group_2_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_check_group_3_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_check_group_4_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_check_group_5_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_check_group_6_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_check_group_7_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_check_in_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_click_present_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_switch_1_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_switch_2_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_switch_3_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_switch_4_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_sou_team_preset_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_soul_preset_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_st_replace_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk8/sk8_st_souls_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/CostumeShikigami/sk9/sk9_check_records_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_record_soul_back_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_check_group_1_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_check_group_2_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_check_group_3_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_check_group_4_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_check_group_5_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_check_group_6_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_check_group_7_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_check_in_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_click_present_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_switch_1_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_switch_2_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_switch_3_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_switch_4_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_sou_team_preset_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_soul_preset_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_st_replace_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/CostumeShikigami/sk9/sk9_st_souls_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/assets.py`：Python 模块；主要定义 `GeneralBattleAssets`。
+- `tasks/Component/GeneralBattle/battle.py`：Python 模块；主要定义 `log_battle_start, Battle, BattleTest`。
+- `tasks/Component/GeneralBattle/battle_wait.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Component/GeneralBattle/config_general_battle.py`：Python 模块；主要定义 `GreenMarkType, GreenMarkEnum, GeneralBattleConfig`。
+- `tasks/Component/GeneralBattle/finish_click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/gb/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/gb/gb_battle_info.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_battle_state_info.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_buff.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_confirm_close_diff_soul.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_de_gold.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_de_win.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_disable_7days_diff_soul.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_false.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_friends.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_gb_check_team_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_gb_skin_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_greed_ghost.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_green_marker.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_green_marker_bottom.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_green_marker_left_top.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_local.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_over_ghost.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_prepare_dark.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_prepare_highlight.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_present_less_than_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_preset.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_preset_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_preset_wit_number.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_reward.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_reward_exp_soul_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_reward_gold.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_reward_gold_snake_skin.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_reward_purple_snake_skin.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_reward_soul_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_reward_soul_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_reward_statistics.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_statistics.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/gb_win.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gb/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/gb/img_supplement.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/gb/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/gb/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/general_battle.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Component/GeneralBattle/gw/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/gw/click2.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/gw/click_activity.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBattle/gw/gw_end_fix_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gw/gw_end_fix_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gw/gw_end_fix_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBattle/gw/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBuff/assets.py`：Python 模块；主要定义 `GeneralBuffAssets`。
+- `tasks/Component/GeneralBuff/config_buff.py`：Python 模块；主要定义 `BuffClass, BuffConfig`。
+- `tasks/Component/GeneralBuff/gb/gb_awake.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_buff_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_close_red.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_cloud.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_exp_100.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_exp_50.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_gold_100.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_gold_50.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_open_yellow.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/gb_soul.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralBuff/gb/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBuff/gb/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBuff/gb/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralBuff/general_buff.py`：Python 模块；主要定义 `GeneralBuff`。
+- `tasks/Component/GeneralInvite/assets.py`：Python 模块；主要定义 `GeneralInviteAssets`。
+- `tasks/Component/GeneralInvite/config_invite.py`：Python 模块；主要定义 `InviteNumber, FindMode, InviteConfig`。
+- `tasks/Component/GeneralInvite/general_invite.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Component/GeneralInvite/gi/gi_add_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_add_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_add_5_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_add_5_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_add_5_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_add_5_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_add_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_back_yellow.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_back_yellow_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_buff.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_fire_fail.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_fire_fail_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_fire_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_flag_1_off.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_flag_1_on.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_flag_2_off.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_flag_2_on.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_flag_3_off.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_flag_3_on.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_flag_4_off.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_flag_4_on.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_gi_emoji_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_gi_explore.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_gi_home.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_gi_in_room.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_gi_speak.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_i_accept.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_i_accept_default.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_i_accept_jy.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_i_reject.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_invite_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_load_friend.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_lock_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_matching.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_sure.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/gi_unlock_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralInvite/gi/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralInvite/gi/member.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralInvite/gi/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralRoom/assets.py`：Python 模块；主要定义 `GeneralRoomAssets`。
+- `tasks/Component/GeneralRoom/config_rom.py`：Python 模块。
+- `tasks/Component/GeneralRoom/general_room.py`：Python 模块；主要定义 `GeneralRoom`。
+- `tasks/Component/GeneralRoom/gr/gr_create_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_create_ensure_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_create_room.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_ensure_private.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_ensure_private_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_ensure_private_false.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_ensure_private_false_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_ensure_public.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_ensure_public_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_ensure_public_false.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_ensure_public_false_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_gr_auto_match.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_gr_back_yellow.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/gr_gr_refresh.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/gr/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralRoom/list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralRoom/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/GeneralRoom/斗町.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/GeneralRoom/连携召唤.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/LootStatistics/README.md`：Markdown 项目说明或开发文档。
+- `tasks/Component/LootStatistics/assets.py`：Python 模块；主要定义 `LootStatisticsAssets`。
+- `tasks/Component/LootStatistics/loot_staistics.py`：Python 模块；主要定义 `LootStatistics`。
+- `tasks/Component/LootStatistics/loots_config.py`：Python 模块；主要定义 `Item`。
+- `tasks/Component/LootStatistics/ls/image1.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/LootStatistics/ls/ls_realm_raid_pass.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/README.md`：Markdown 项目说明或开发文档。
+- `tasks/Component/ReplaceShikigami/assets.py`：Python 模块；主要定义 `ReplaceShikigamiAssets`。
+- `tasks/Component/ReplaceShikigami/replace_shikigami.py`：Python 模块；主要定义 `ReplaceShikigami`。
+- `tasks/Component/ReplaceShikigami/rs/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/ReplaceShikigami/rs/detect_image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/ReplaceShikigami/rs/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/ReplaceShikigami/rs/rs_detect_empty_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_detect_empty_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_detect_empty_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_detect_empty_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_detect_empty_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_detect_empty_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_level_max.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_material.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_material_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_n.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_n_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_no_add.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_r.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_r_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_records_shiki.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_smart_exchange.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_sp.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_sp_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_sr.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_sr_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_ssr.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_ssr_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_ur.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_rs_ur_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_u_circle_alternate.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/rs_u_confirm_alternate.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/ReplaceShikigami/rs/supplement.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/ReplaceShikigami/rs/utilize_u_confirm_small.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/RightActivity/assets.py`：Python 模块；主要定义 `RightActivityAssets`。
+- `tasks/Component/RightActivity/ra/as_toggle_button.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/RightActivity/ra/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/RightActivity/ra/ra_ra_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/RightActivity/ra/ra_ra_open.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/RightActivity/right_activity.py`：Python 模块；主要定义 `RightActivity`。
+- `tasks/Component/Summon/assets.py`：Python 模块；主要定义 `SummonAssets`。
+- `tasks/Component/Summon/sm/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Summon/sm/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Summon/sm/sm_blue_ticket.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Summon/sm/sm_low_ticket.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Summon/sm/sm_one_ticket.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Summon/sm/sm_sm_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Summon/sm/sm_sm_confirm_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/Summon/sm/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/Summon/summon.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Component/SwitchAccount/README.md`：Markdown 项目说明或开发文档。
+- `tasks/Component/SwitchAccount/assets.py`：Python 模块；主要定义 `SwitchAccountAssets`。
+- `tasks/Component/SwitchAccount/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchAccount/exit_game.py`：Python 模块；主要定义 `ExitGame`。
+- `tasks/Component/SwitchAccount/login_account.py`：Python 模块；主要定义 `LoginAccount`。
+- `tasks/Component/SwitchAccount/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchAccount/res/check_login_form.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchAccount/res/res_sa_check_select_svr_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/res_sa_check_select_svr_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/res_sa_login_form_android.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/res_sa_login_form_apple.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_account_drop_down_add_account.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_account_drop_down_closed.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_account_drop_down_opened.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_account_login_btn.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_check_select_svr.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_login_form_android.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_login_form_apple.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_netease_game_logo.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_switch_account_btn.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_user_center.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_user_center_copy_btn.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/res/sa_user_center_profile.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchAccount/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchAccount/switch_account.py`：Python 模块；主要定义 `SwitchAccount`。
+- `tasks/Component/SwitchAccount/switch_account_config.py`：Python 模块；主要定义 `AccountInfo`。
+- `tasks/Component/SwitchOnmyoji/assets.py`：Python 模块；主要定义 `SwitchOnmyojiAssets`。
+- `tasks/Component/SwitchOnmyoji/config.py`：Python 模块；主要定义 `Onmyoji`。
+- `tasks/Component/SwitchOnmyoji/so/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchOnmyoji/so/so_hero_check.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/so/so_hiromasa_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/so/so_kagura_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/so/so_michinaga_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/so/so_onmyoji_check.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/so/so_onmyoji_switch.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/so/so_seimi_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/so/so_yao_bikuni_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/so/so_yorimitsu_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchOnmyoji/switch_onmyoji.py`：Python 模块；主要定义 `SwitchOnmyoji`。
+- `tasks/Component/SwitchSoul/assets.py`：Python 模块；主要定义 `SwitchSoulAssets`。
+- `tasks/Component/SwitchSoul/ss/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchSoul/ss/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchSoul/ss/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchSoul/ss/ss_check_block.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_goto_shikigami_common.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_record_soul_back.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_check_group_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_check_group_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_check_group_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_check_group_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_check_group_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_check_group_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_check_group_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_check_in.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_click_present.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_switch_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_switch_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_switch_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_switch_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_sou_team_present.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/ss_soul_preset.png`：二进制、图像、字体或图标资源。
+- `tasks/Component/SwitchSoul/ss/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Component/SwitchSoul/switch_soul.py`：Python 模块；主要定义 `switch_parser, SwitchSoul`。
+- `tasks/Component/SwitchSoul/switch_soul_config.py`：Python 模块；主要定义 `SwitchSoulConfig`。
+- `tasks/Component/config_base.py`：Python 模块；主要定义 `format_timedelta, datadelta_validator, datetime_validator, time_validator, serializer_exclude, dynamic_hide, ConfigBase`。
+- `tasks/Component/config_scheduler.py`：Python 模块；主要定义 `Scheduler`。
+- `tasks/DailyTrifles/assets.py`：Python 模块；主要定义 `DailyTriflesAssets`。
+- `tasks/DailyTrifles/config.py`：Python 模块；主要定义 `SummonType, DailyTriflesConfig, DailyTrifles`。
+- `tasks/DailyTrifles/love/Screenshots_click_bless.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/love/Screenshots_luck_msg.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/love/Screenshots_luck_title.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/love/Screenshots_one_click_bless.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/love/friendship_up.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/love/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DailyTrifles/love/love_friend_tab.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/love/love_l_collect.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/love/love_l_friends.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/love/love_l_love.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/page.py`：Python 模块。
+- `tasks/DailyTrifles/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/DailyTrifles/store/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DailyTrifles/store/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DailyTrifles/store/store_cost_type_jade.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/store/store_gift_recommend.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/store/store_gift_sign.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/store/store_room_gift.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/store/store_sushi.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/summonRecall/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DailyTrifles/summonRecall/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DailyTrifles/summonRecall/recall_one_ticket.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/summonRecall/recall_sm_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/DailyTrifles/summonRecall/recall_ticket.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/assets.py`：Python 模块；主要定义 `DelegationAssets`。
+- `tasks/Delegation/config.py`：Python 模块；主要定义 `DelegationConfig, Delegation`。
+- `tasks/Delegation/d/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Delegation/d/d_d_back.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_cancel.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_select_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_select_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_select_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_select_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_select_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_skip.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/d_d_start.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/d/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Delegation/d/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Delegation/rewards/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Delegation/rewards/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Delegation/rewards/rewards_chat_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/rewards/rewards_chat_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/rewards/rewards_rewards_chat.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/rewards/rewards_rewards_done.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/rewards/rewards_rewards_false.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/rewards/rewards_rewards_get.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/rewards/rewards_rewards_min.png`：二进制、图像、字体或图标资源。
+- `tasks/Delegation/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/DemonEncounter/assets.py`：Python 模块；主要定义 `DemonEncounterAssets`。
+- `tasks/DemonEncounter/boss/boss_best_boss_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_back_white.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_done_check.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_gather.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_killed.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_namazu.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_no_select.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_oboroguruma.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_odokuro.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_shinkiro.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_songstress.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_tsuchigumo.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_wait.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/boss_boss_win.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/boss/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/boss/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/boss/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/config.py`：Python 模块；主要定义 `BossType, BoxBuyConfig, BestDemonBossSelect, DemonConfig, BestDemonConfig, convert_to_general_battle_config, DemonBattleConfig, BestDemonBattleConfig`。
+- `tasks/DemonEncounter/data/.gitignore`：版本控制或构建上下文忽略规则。
+- `tasks/DemonEncounter/data/README.md`：Markdown 项目说明或开发文档。
+- `tasks/DemonEncounter/data/answer.py`：Python 模块；主要定义 `remove_symbols, _tokenize_question, _normalize, Answer`。
+- `tasks/DemonEncounter/data/data.csv`：任务目录辅助文件，服务于对应游戏活动的自动化流程。
+- `tasks/DemonEncounter/data/extract_to_csv.py`：Python 模块；主要定义 `Extracter`。
+- `tasks/DemonEncounter/data/utils.py`：Python 模块；主要定义 `remove_symbols`。
+- `tasks/DemonEncounter/demon/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/demon/demon_de_award.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_balloon.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_boss.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_boss_best.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_box.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_box_center.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_defeat_1.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_defeat_2.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_defeat_3.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_defeat_4.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_find.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_find_boss.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_letter.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_location.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_mystery.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_realm.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_realm_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_red_dharma.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_shi_records.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_de_small_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_jade_50.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_letter_close.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_mystery_amulet.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/demon_sushi.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonEncounter/demon/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/demon/image_side.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/demon/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/mail/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/mail/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonEncounter/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_demon_back_check.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_demon_gather.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_enter_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_hunt.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_hunt_check.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_new.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_pray.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_rank_lsit.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_reward_all.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/DemonRetreat_shrine.png`：二进制、图像、字体或图标资源。
+- `tasks/DemonRetreat/DemonRetreat/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonRetreat/DemonRetreat/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DemonRetreat/assets.py`：Python 模块；主要定义 `DemonRetreatAssets`。
+- `tasks/DemonRetreat/config.py`：Python 模块；主要定义 `DemonRetreatTime, DemonRetreat`。
+- `tasks/DemonRetreat/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Dokan/assets.py`：Python 模块；主要定义 `DokanAssets`。
+- `tasks/Dokan/config.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Dokan/dokan_scene.py`：Python 模块；主要定义 `DokanScene, DokanSceneDetector`。
+- `tasks/Dokan/ex_green_mark.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Dokan/res/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Dokan/res/dokan_attacking.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/gb_prepare_dark.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/gb_prepare_highlight.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/goto_list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Dokan/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Dokan/res/list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Dokan/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Dokan/res/res_dokan_boss_waiting.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_abandoned_toppa.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_abandoned_toppa_abandoned.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_abandoned_toppa_continue.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_abandoned_toppa_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_abandoned_toppa_title.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_activated.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_battle_master_first.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_battle_master_second.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_battle_over.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_cd.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_cd1.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_center_challenge.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_center_guanzhu_xiuxi.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_center_point_people_number.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_center_top.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_challenge_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_check.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_cheering.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_cheering_attacking_sama.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_cheering_gray.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_cheering_scores.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_create_dokan.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_create_dokan_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_dokan_info_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_dokan_quit.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_exit_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_failed_vote_battle_again.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_failed_vote_keep_bounty.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_failed_vote_no.png.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_fighting.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_finding_dokan.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_finished.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_found_dokan.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_gathering.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_in_field.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_in_field2.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_master_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_priority.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_priority_0.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_priority_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_priority_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_priority_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_priority_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_quit_battle_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_refresh_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_remain_attack_count_done.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_remain_attack_count_one.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_remain_attack_count_two.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_remain_attack_count_zero.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_rightpad_point_bounty.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_shikigami.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_spoils_of_dokan.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_start_challenge.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_start_challenge2.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_today_attack_count.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_toppa_rank.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_dokan_win.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/res_ryou_shenshe.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/scene_ryou.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/scene_shenshe.png`：二进制、图像、字体或图标资源。
+- `tasks/Dokan/res/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Dokan/script_task.py`：Python 模块；主要定义 `ScriptTask, test_goto_main`。
+- `tasks/Dokan/utils.py`：Python 模块；主要定义 `retry, detect_safe_area, detect_safe_area2, test_ocr_locate_dokan_target, test_anti_detect_random_click`。
+- `tasks/Duel/assets.py`：Python 模块；主要定义 `DuelAssets`。
+- `tasks/Duel/ban/sp云外镜.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/ban/封阳君.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/ban/星熊童子.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/ban/祸津神.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/ban/荒骷髅.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/config.py`：Python 模块；主要定义 `DuelConfig, DuelCelebConfig, Duel`。
+- `tasks/Duel/duel/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Duel/duel/duel_ban.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_battle_type_common.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_battle_with_train.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_battle_with_train2.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_auto_entry.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_battle2.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_battle_protect.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_celeb_honor.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_celeb_star.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_check_ban.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_fail.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_hand.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_help.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_prepare.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_prepare_done.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_team.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_team_swtich.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_try.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_victory.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_victory_share.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_victory_share_mask.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_d_word_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_duel_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/duel_duel_honor.png`：二进制、图像、字体或图标资源。
+- `tasks/Duel/duel/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Duel/duel/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Duel/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/DyeTrials/assets.py`：Python 模块；主要定义 `DyeTrialsAssets`。
+- `tasks/DyeTrials/config.py`：Python 模块；主要定义 `DyeTrials`。
+- `tasks/DyeTrials/fp/battle_success.png`：二进制、图像、字体或图标资源。
+- `tasks/DyeTrials/fp/fp_fp_access.png`：二进制、图像、字体或图标资源。
+- `tasks/DyeTrials/fp/fp_fp_access_1.png`：二进制、图像、字体或图标资源。
+- `tasks/DyeTrials/fp/fp_fp_challenge.png`：二进制、图像、字体或图标资源。
+- `tasks/DyeTrials/fp/fp_toggle_button.png`：二进制、图像、字体或图标资源。
+- `tasks/DyeTrials/fp/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DyeTrials/fp/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/DyeTrials/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/EternitySea/assets.py`：Python 模块；主要定义 `EternitySeaAssets`。
+- `tasks/EternitySea/config.py`：Python 模块；主要定义 `Layer, EternitySeaConfig, EternitySea`。
+- `tasks/EternitySea/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/EternitySea/res/list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/EternitySea/res/res_back_bottom.png`：二进制、图像、字体或图标资源。
+- `tasks/EternitySea/res/res_eternity_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/EternitySea/res/res_eternity_sea_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/EternitySea/res/res_eternitysea_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/EternitySea/res/res_form_team.png`：二进制、图像、字体或图标资源。
+- `tasks/EternitySea/res/res_neweternitysea_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/EternitySea/res/res_pet_present.png`：二进制、图像、字体或图标资源。
+- `tasks/EternitySea/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/EvoZone/assets.py`：Python 模块；主要定义 `EvoZoneAssets`。
+- `tasks/EvoZone/config.py`：Python 模块；主要定义 `UserStatus, Layer, KirinType, EvoZoneConfig, EvoZone`。
+- `tasks/EvoZone/o/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/EvoZone/o/o_evozone_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_evozone_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_evozone_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_fire_kirin.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_form_team.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_lightning_kirin.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_pet_present.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_shi_records.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_water_kirin.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/o/o_wind_kirin.png`：二进制、图像、字体或图标资源。
+- `tasks/EvoZone/res/list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/EvoZone/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/EvoZone/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/ExperienceYoukai/assets.py`：Python 模块；主要定义 `ExperienceYoukaiAssets`。
+- `tasks/ExperienceYoukai/config.py`：Python 模块；主要定义 `ExperienceYoukaiConfig, ExperienceYoukai`。
+- `tasks/ExperienceYoukai/ey/ey_exp_win.png`：二进制、图像、字体或图标资源。
+- `tasks/ExperienceYoukai/ey/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/ExperienceYoukai/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Exploration/READMD.md`：Markdown 项目说明或开发文档。
+- `tasks/Exploration/assets.py`：Python 模块；主要定义 `ExplorationAssets`。
+- `tasks/Exploration/base.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Exploration/config.py`：Python 模块；主要定义 `ExplorationLevel, AttackNumber, UpType, UserStatus, AutoRotate, ChooseRarity, InviteConfig, Scrolls`。
+- `tasks/Exploration/highlight/highlight_light1.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light10.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light11.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light12.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light13.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light14.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light2.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light3.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light4.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light5.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light6.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light7.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light8.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_light9.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_lighttest.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_up_coin - 副本.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_up_coin.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_up_daruma - 副本.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_up_daruma.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_up_exp - 副本.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/highlight_up_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/highlight/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Exploration/page.py`：Python 模块；主要定义 `inherit_transitions`。
+- `tasks/Exploration/res/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Exploration/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Exploration/res/long_click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Exploration/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Exploration/res/res_battle_reward.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_battle_start.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_boss_battle_button.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_check_main_title.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_check_play_title.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_auto_rotate_off.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_auto_rotate_on.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_enter_choose_rarity.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_exit_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_exploration_click.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_exploration_open.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_n_rarity.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_open_folder.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_open_settings.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_ratate_exsit.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_s_rarity.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_settings_button.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_e_sure_button.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_exp_arrow_left.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_exp_arrow_right.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_exp_create_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_exp_create_team.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_exploration_title.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_normal_battle_button.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_red_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_swipe_end.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_team_emoji.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_team_emoji_fight.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/res_treasure_box_click.png`：二进制、图像、字体或图标资源。
+- `tasks/Exploration/res/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Exploration/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Exploration/solo.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Exploration/version.py`：Python 模块；主要定义 `Version, apply_mask, highlight, HighlightGif, HighLight`。
+- `tasks/FallenSun/assets.py`：Python 模块；主要定义 `FallenSunAssets`。
+- `tasks/FallenSun/config.py`：Python 模块；主要定义 `UserStatus, Layer, FallenSunConfig, FallenSun`。
+- `tasks/FallenSun/f/f_fallen_sun.png`：二进制、图像、字体或图标资源。
+- `tasks/FallenSun/f/f_fallen_sun_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/FallenSun/f/f_fallen_sun_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/FallenSun/f/f_fallen_sun_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/FallenSun/f/f_form_team.png`：二进制、图像、字体或图标资源。
+- `tasks/FallenSun/f/f_pet_present.png`：二进制、图像、字体或图标资源。
+- `tasks/FallenSun/f/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/FallenSun/res/list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/FallenSun/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/FallenSun/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/FindJade/README.md`：Markdown 项目说明或开发文档。
+- `tasks/FindJade/WantedQuestsEx.py`：Python 模块；主要定义 `need_invite_vip, get_invite_vip_name, next_run, invite_success_callback, get_config`。
+- `tasks/FindJade/assets.py`：Python 模块；主要定义 `FindJadeAssets`。
+- `tasks/FindJade/config.py`：Python 模块；主要定义 `InviteHistoryItem, InviteInfo, FindJadeConfig, FindJade`。
+- `tasks/FindJade/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/FloatParade/assets.py`：Python 模块；主要定义 `FloatParadeAssets`。
+- `tasks/FloatParade/config.py`：Python 模块；主要定义 `Scheduler, LevelReward, FloatParadeConfig, FloatParade`。
+- `tasks/FloatParade/fp/fp_batch_selection.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_batch_selection_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_access.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_batch.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_batch_false.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_batch_true.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_getall0.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_getall1.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_gift_close.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_gift_flag1.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_gift_flag2.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_red_close.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_select_1.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_select_2.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_select_3.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_tasks.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_fp_upgrade.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_red_point_0.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/fp_toggle_button.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/fp/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/FloatParade/mileage/mileage.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/FloatParade/mileage/mileage_claim_mileage.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/mileage/mileage_entry_mileage.png`：二进制、图像、字体或图标资源。
+- `tasks/FloatParade/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/FrogBoss/assets.py`：Python 模块；主要定义 `FrogBossAssets`。
+- `tasks/FrogBoss/config.py`：Python 模块；主要定义 `Strategy, FrogBossConfig, FrogBoss`。
+- `tasks/FrogBoss/fb/fb_bet_failure.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_bet_left.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_bet_right.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_bet_success.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_bet_success_box.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_bet_sure.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_betted.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_failure_left.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_failure_right.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_boss_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_boss_rest.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_check.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_last_lose.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_last_select_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_last_select_red.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_last_win.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_log.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_log_check.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_frog_log_close.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_gold_30.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_gold_30_check.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_next_competition.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_success_left.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/fb_success_right.png`：二进制、图像、字体或图标资源。
+- `tasks/FrogBoss/fb/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/FrogBoss/fb/image2.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/FrogBoss/fb/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/FrogBoss/frog_oas.py`：Persistent, outcome-verified weighted voting. Scores are not win probabilities.；主要定义 `fingerprint, same_lineup, parse_side, OasHistory, fetch_predictions`。
+- `tasks/FrogBoss/oas_sources.py`：UIDs shared with the legacy Dashen strategy; deduplicated for frog_oas.。
+- `tasks/FrogBoss/record_reader.py`：Read complete visible record rows, anchored on the selected red/blue emblem.；主要定义 `read_record_rows`。
+- `tasks/FrogBoss/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/FrogBoss/test_betting_flow.py`：Python 模块；主要定义 `FrameTimer, BettingTask, BettingFlowTests`。
+- `tasks/FrogBoss/test_frog_oas.py`：Python 模块；主要定义 `OasTests`。
+- `tasks/GameUi/USAGE.md`：Markdown 项目说明或开发文档。
+- `tasks/GameUi/action.py`：Python 模块；主要定义 `ActionSequence, ConditionalAction, sequence, conditional_action`。
+- `tasks/GameUi/additional/act.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GameUi/additional/additional_act_list_expand.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/additional/additional_ad_close_red.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/additional/additional_ad_disappear.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/additional/additional_paper_doll_close.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/additional/additional_records_close.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/additional/mall.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GameUi/assets.py`：Python 模块；主要定义 `GameUiAssets`。
+- `tasks/GameUi/common.py`：Python 模块；主要定义 `camel_to_snake, infer_stack_symbol, infer_page_key_and_name, infer_tasks_category_from_parts, infer_tasks_category_from_path, infer_category, invoke_task_callable`。
+- `tasks/GameUi/default_pages.py`：Python 模块；主要定义 `random_click, handle_login_page, exploration_to_six_gates, handle_battle_page, handle_battle_reward_page`。
+- `tasks/GameUi/game_ui.py`：Python 模块。
+- `tasks/GameUi/matcher.py`：Python 模块；主要定义 `Matcher, AtomMatcher, AnyMatcher, AllMatcher, NotMatcher, ensure_matcher, any_of, all_of`。
+- `tasks/GameUi/navigator.py`：Python 模块；主要定义 `GameUi`。
+- `tasks/GameUi/page.py`：Python 模块。
+- `tasks/GameUi/page/README.md`：Markdown 项目说明或开发文档。
+- `tasks/GameUi/page/climb_act.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/image_act_list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GameUi/page/image_exploration.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GameUi/page/image_main.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GameUi/page/image_name.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/image_town.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GameUi/page/list_image_act_list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GameUi/page/list_ocr_act_list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GameUi/page/page_act_list_goto_act.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_back_act_list.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_back_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_back_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_back_daily.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_back_friends.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_back_mall.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_back_y.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_back_yollow.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_bondling_goto_exploration.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_act_list.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_area_boss.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_awake.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_awake_zones.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_bondling_fairyland.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_collection.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_daily.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_delegation.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_demon_encounter.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_demon_encounter_2.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_demon_encounter_realworld.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_draft_duel.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_duel.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_entertainment.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_exploration.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_friends.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_goryou.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_guild.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_heian_kitan.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_hero_test.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_hunt.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_hunt_kirin.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_incense_realm.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_kyakkiyakou.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_login_form.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_main.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_mall.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_mall_recommend.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_mantra_tower.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_moon_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_onmyodo.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_peacock_kingdom.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_pure_buddha_realm.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_realm_raid.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_records.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_ryou_daoguan.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_seasonrift_forest.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_secret_zones.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_shrin.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_six_gates.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_soul_zones.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_summon.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_team.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_town.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_check_travel.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_demon_encounter_goto_town.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_demon_encounter_realworld.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_area_boss.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_awake_zone.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_bondling_fairyland.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_delegation.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_goryou_realm.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_heian_kitan.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_hero_test.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_main.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_realm_raid.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_secret_zones.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_goto_soul_zone.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_to_incense_realm.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_to_mantra_tower.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_to_moon_sea.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_to_peacock_kingdom.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_to_pure_buddha_realm.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_exploration_to_seasonrift_forest.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_guild_to_shrin.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_hyakkiyakou_close.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_kekkai_toppa.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_collection.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_daily.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_exploration.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_friends.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_guild.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_mall.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_onmyodo.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_shikigami_records.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_summon.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_team.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_town.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_goto_travel.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_main_scroll_close.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_realm_raid_goto_exploration.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_realm_raid_goto_shikigami_records.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_ryoutoppa_goto_realmraid.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_summon_goto_main.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_town_goto_demon_encounter.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_town_goto_draft_duel.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_town_goto_duel.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_town_goto_entertainment.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_town_goto_hunt.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_town_goto_hyakkisen.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_town_goto_hyakkiyakou.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/page_town_goto_main.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page/store_dlc_close.png`：二进制、图像、字体或图标资源。
+- `tasks/GameUi/page_definition.py`：Python 模块；主要定义 `_clamp_priority, sort_pages_by_priority, Transition, Page`。
+- `tasks/GameUi/registry.py`：Python 模块；主要定义 `PageRegistry`。
+- `tasks/GameUi/session.py`：Python 模块；主要定义 `NavigatorSession`。
+- `tasks/General/assets.py`：Python 模块；主要定义 `GeneralAssets`。
+- `tasks/General/config.py`：Python 模块。
+- `tasks/GlobalGame/assets.py`：Python 模块；主要定义 `GlobalGameAssets`。
+- `tasks/GlobalGame/config.py`：Python 模块；主要定义 `Transport, TeamFlow, GlobalGame`。
+- `tasks/GlobalGame/config_emergency.py`：Python 模块；主要定义 `FriendInvitation, WhenNetworkAbnormal, WhenNetworkError, Emergency`。
+- `tasks/GlobalGame/gg/gg_accept.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_chat_close_button.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_client_clear.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_f_accept.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_f_jade.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_f_reject.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_g_accept.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_g_cat_food.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_g_dog_food.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_g_ignore.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_g_jade.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_g_reject.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_network_abnormal.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_network_error.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/gg_reject.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/gg/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GlobalGame/ui/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GlobalGame/ui/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GlobalGame/ui/ui_ui_award.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_back_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_back_circle.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_back_red.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_back_yellow.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_cancel.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_cancel_old.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_cancel_samll.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_check.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_confirm_old.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_confirm_samll.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_gotit_small.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_reward.png`：二进制、图像、字体或图标资源。
+- `tasks/GlobalGame/ui/ui_ui_uncheck.png`：二进制、图像、字体或图标资源。
+- `tasks/GoldYoukai/assets.py`：Python 模块；主要定义 `GoldYoukaiAssets`。
+- `tasks/GoldYoukai/config.py`：Python 模块；主要定义 `GoldYoukaiConfig, GoldYoukai`。
+- `tasks/GoldYoukai/gy/gy_gold_win.png`：二进制、图像、字体或图标资源。
+- `tasks/GoldYoukai/gy/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GoldYoukai/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/GoryouRealm/assets.py`：Python 模块；主要定义 `GoryouRealmAssets`。
+- `tasks/GoryouRealm/config.py`：Python 模块；主要定义 `GoryouClass, GoryouConfig, GoryouRealm`。
+- `tasks/GoryouRealm/gr/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GoryouRealm/gr/gr_gr_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/GoryouRealm/gr/gr_gr_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/GoryouRealm/gr/gr_gr_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/GoryouRealm/gr/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GoryouRealm/gr/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GoryouRealm/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/GotoMain/assets.py`：Python 模块；主要定义 `GotoMainAssets`。
+- `tasks/GotoMain/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/GuildActivityMonitor/assets.py`：Python 模块；主要定义 `GuildActivityMonitorAssets`。
+- `tasks/GuildActivityMonitor/config.py`：Python 模块；主要定义 `GuildActivityMonitorCombatTime, GuildActivity, GuildActivityMonitor`。
+- `tasks/GuildActivityMonitor/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GuildActivityMonitor/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/GuildBanquet/assets.py`：Python 模块；主要定义 `GuildBanquetAssets`。
+- `tasks/GuildBanquet/config.py`：Python 模块；主要定义 `Weekday, GuildBanquetTime, GuildBanquet`。
+- `tasks/GuildBanquet/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/GuildBanquet/res/res_flag.png`：二进制、图像、字体或图标资源。
+- `tasks/GuildBanquet/script_task.py`：Python 模块；主要定义 `Weekday, ScriptTask`。
+- `tasks/HeroTest/as/as_back.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj__defalut_attribute.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_bless.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_property_add_critical.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_reset_close.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_reset_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_skill_add1.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_skill_add2.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_skill_add_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_bcmj_win.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_check_hero1.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_check_hero1_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_check_hero1_skill.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_check_hero2.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_check_hero2_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_check_hero2_skill.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_enter_ccsl.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_enter_mxmj.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_gbb.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_gbb_back.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_gbb_back2.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_hero2_skill1.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_hero2_skill2.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_hero2_skill3.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_hero2_skill4.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_hero2_skill5.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_hero2_skill6.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_hero_exp_max.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_one.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_real_money.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_start_challenge.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_switch_hero1.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_switch_hero2.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_two.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/as_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/HeroTest/as/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/HeroTest/as/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/HeroTest/as/image_hero2_skill.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/HeroTest/as/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/HeroTest/assets.py`：Python 模块；主要定义 `HeroTestAssets`。
+- `tasks/HeroTest/config.py`：Python 模块；主要定义 `Layer, SkillMode, HeroTestConfig, HeroTest`。
+- `tasks/HeroTest/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Hunt/assets.py`：Python 模块；主要定义 `HuntAssets`。
+- `tasks/Hunt/config.py`：Python 模块；主要定义 `HuntTime, HuntConfig, HuntGeneralBattleConfig, Hunt`。
+- `tasks/Hunt/hunt/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hunt/hunt/hunt_hunt_hunt.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/hunt/hunt_hunt_shrine.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/hunt/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hunt/kirin/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hunt/kirin/kirin_kirin_challage.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/kirin/kirin_kirin_end.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/kirin/kirin_kirin_gather.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/kirin/kirin_kirin_start_challage.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/netherworld/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hunt/netherworld/netherworld_nw.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/netherworld/netherworld_nw_challage.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/netherworld/netherworld_nw_done.png`：二进制、图像、字体或图标资源。
+- `tasks/Hunt/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Hyakkiyakou/.gitignore`：版本控制或构建上下文忽略规则。
+- `tasks/Hyakkiyakou/README.md`：Markdown 项目说明或开发文档。
+- `tasks/Hyakkiyakou/agent/agent.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Hyakkiyakou/agent/focus.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Hyakkiyakou/agent/utils.py`：Python 模块。
+- `tasks/Hyakkiyakou/assets.py`：Python 模块；主要定义 `HyakkiyakouAssets`。
+- `tasks/Hyakkiyakou/config.py`：Python 模块；主要定义 `ModelPrecision, InferenceEngine, ScreenshotMethod, ControlMethod, HyakkiyakouConfig, HyakkiyakouModels, DebugConfig, Hyakkiyakou`。
+- `tasks/Hyakkiyakou/debugger.py`：Python 模块；主要定义 `test_track, show_track, Debugger, test_debugger`。
+- `tasks/Hyakkiyakou/hya/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/hya/hya_bean0.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean05.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean1.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean10.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean2.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean3.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean4.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean5.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean6.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean7.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean8.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_bean9.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_check_invitation.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_ensure_recall.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_friend_remote_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_friend_remote_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_friend_ryou_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_friend_ryou_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_friend_same_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_friend_same_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_haccess.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hclose_red.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hend.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hfreeze.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hinvite.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hselected.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hstart.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_htitle.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hya_state_buff02.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hya_state_buff03.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hya_state_buff05.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hya_state_buff06.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_hya_state_buff07.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_0.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resf_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_0.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_7.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/hya_resr_9.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/hya/image1.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/hya/image2.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/hya/image3.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/hya/image4.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/hya/image5.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/hya/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/hya/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/prepare/get_images.py`：Python 模块；主要定义 `GenerateImages`。
+- `tasks/Hyakkiyakou/script_task.py`：Python 模块；主要定义 `plot_save, ScriptTask`。
+- `tasks/Hyakkiyakou/slave/hya_color.py`：Python 模块；主要定义 `HyaColor`。
+- `tasks/Hyakkiyakou/slave/hya_device.py`：Python 模块；主要定义 `image_black, HyaDevice`。
+- `tasks/Hyakkiyakou/slave/hya_slave.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Hyakkiyakou/train/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/train/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/train/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Hyakkiyakou/train/train_check_run.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_switch_background.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tcheck_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tcheck_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tcheck_22.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tcheck_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tcheck_32.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tcheck_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tcheck_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tcheck_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tpage_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tpage_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tpage_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tpage_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tpage_5.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/train/train_tpage_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Hyakkiyakou/utils/exp_test.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Hyakkiyakou/utils/fast_device.py`：Python 模块；主要定义 `FastDevice`。
+- `tasks/Hyakkiyakou/utils/generate.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Hyakkiyakou/utils/realm_raid_test.py`：Python 模块；主要定义 `RealmRaidTest`。
+- `tasks/Hyakkiyakou/utils/utils.py`：Python 模块；主要定义 `usage_time`。
+- `tasks/Hyakkiyakou/utils/video2images.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/KekkaiActivation/a/a_a_activate_gray.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_activate_yellow.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_auto_invite.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_card_all.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_card_fish.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_card_kaiko.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_card_moon.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_card_other.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_card_room.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_check_card.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_demount.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_empty.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_friend_1.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_friend_2.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_harvest_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_harvest_fish4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_harvest_fish_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_harvest_fish_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_harvest_kaiko_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_harvest_kaiko_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_harvest_kaiko_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_harvest_moon_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_a_invite.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/a_aa_swipe_block.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/a/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiActivation/a/image2.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiActivation/assets.py`：Python 模块；主要定义 `KekkaiActivationAssets`。
+- `tasks/KekkaiActivation/cards/cards_cards_fish_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_fish_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_fish_5.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_fish_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_kaiko_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_kaiko_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_kaiko_5.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_kaiko_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_moon_1.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_moon_2.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_moon_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_moon_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_moon_5.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/cards_cards_moon_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiActivation/cards/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiActivation/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiActivation/config.py`：Python 模块；主要定义 `CardType, ActivationScheduler, ActivationConfig, KekkaiActivation`。
+- `tasks/KekkaiActivation/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiActivation/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/KekkaiActivation/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiActivation/utils.py`：Python 模块；主要定义 `parse_rule`。
+- `tasks/KekkaiUtilize/assets.py`：Python 模块；主要定义 `KekkaiUtilizeAssets`。
+- `tasks/KekkaiUtilize/config.py`：Python 模块；主要定义 `SelectFriendList, UtilizeRule, UtilizeScheduler, UtilizeConfig, KekkaiUtilize`。
+- `tasks/KekkaiUtilize/ku/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiUtilize/ku/ku_guild_ap.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/ku_guild_assets.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/ku_guild_assets_receive.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/ku_guild_collapse.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/ku_guild_expand.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/ku_guild_info.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/ku_guild_realm.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/ku_guild_shirne.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/ku_guild_wish.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/ku/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiUtilize/realm/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiUtilize/realm/realm_ap_extract.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_box_ap.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_box_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_box_exp_max.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_card_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_exp_extract.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_plant_tree_close.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_realm_shin.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_shi_card.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_shi_defense.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_shi_grown.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm/realm_utilize_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/realm_test.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/KekkaiUtilize/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/KekkaiUtilize/utilize/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiUtilize/utilize/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiUtilize/utilize/image_2.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiUtilize/utilize/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiUtilize/utilize/select_realm_on_1.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/select_realm_on_2.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/select_realm_on_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/select_realm_on_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KekkaiUtilize/utilize/utilize_check_friend_realm_1.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_check_friend_realm_2.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_check_friend_realm_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_add_1.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_add_2.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_big_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_big_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_big_5.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_big_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_confirm_small.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_enter_realm.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_fish_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_fish_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_fish_5.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_fish_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_moon_2.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_moon_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_moon_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_moon_5.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_moon_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_taiko_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_taiko_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_taiko_5.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_u_taiko_6.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_utilize_add.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_utilize_friend_group.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utilize/utilize_utilize_zones_group.png`：二进制、图像、字体或图标资源。
+- `tasks/KekkaiUtilize/utils.py`：Python 模块；主要定义 `CardClass, target_to_card_class`。
+- `tasks/KittyShop/assets.py`：Python 模块；主要定义 `KittyShopAssets`。
+- `tasks/KittyShop/config.py`：Python 模块；主要定义 `KittyShopConfig, KittyShop`。
+- `tasks/KittyShop/ks/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KittyShop/ks/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KittyShop/ks/image_name.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_go1.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_add.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_busy.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_busy_1.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_busy_2.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_busy_3.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_busy_4.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_busy_5.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_finsh.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_flag.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_flag1.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_gift.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_main_share.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_start_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_start_farming.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/ks_unselected.png`：二进制、图像、字体或图标资源。
+- `tasks/KittyShop/ks/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/KittyShop/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/MemoryScrolls/assets.py`：Python 模块；主要定义 `MemoryScrollsAssets`。
+- `tasks/MemoryScrolls/config.py`：Python 模块；主要定义 `DoubleScrolls, ScrollNumber, MemoryScrollsConfig, MemoryScrollsFinish, MemoryScrolls`。
+- `tasks/MemoryScrolls/ms/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MemoryScrolls/ms/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MemoryScrolls/ms/ms_ms_complete.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_complete_100.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_contribute.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_contributed.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_double_scrolls_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_fragment_s.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_fragment_s_50.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_fragment_s_verification.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_main.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_zero_l.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_zero_m.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/ms_ms_zero_s.png`：二进制、图像、字体或图标资源。
+- `tasks/MemoryScrolls/ms/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MemoryScrolls/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/MetaDemon/assets.py`：Python 模块；主要定义 `MetaDemonAssets`。
+- `tasks/MetaDemon/config.py`：Python 模块；主要定义 `DefaultStrategy, Strategy, MetaDemonConfig, MetaDemon`。
+- `tasks/MetaDemon/md/Screenshots_a2.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/Screenshots_a3.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/Screenshots_a4.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/Screenshots_a5.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/Screenshots_a6.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MetaDemon/md/image_2025.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MetaDemon/md/md_back_check.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_battle_demon.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_boss_convene.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_boss_empty.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_boss_empty_1.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_boss_empty_2.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_crafting_1.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_crafting_card_star_1.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_crafting_empty.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_crafting_empty_new.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_crafting_start.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_enter2.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_enter_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_find_demon.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_battle_failure.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_extreme.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_find.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_fire_common.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_fire_power.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_gift_box.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_hard.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_md_main.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_red_back.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_right_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_star56_hp_threshold_f.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_star56_hp_threshold_t.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/md_star56_pos_1.png`：二进制、图像、字体或图标资源。
+- `tasks/MetaDemon/md/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MetaDemon/script_task.py`：Python 模块；主要定义 `Star56, ScriptTask`。
+- `tasks/MysteryShop/assets.py`：Python 模块；主要定义 `MysteryShopAssets`。
+- `tasks/MysteryShop/config.py`：Python 模块；主要定义 `ShopConfig, ShareConfig, MysteryShop`。
+- `tasks/MysteryShop/ms/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MysteryShop/ms/ms_invite_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_me_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_before.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_black.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_check_black.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_check_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_check_taiko_3.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_check_taiko_4.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_next.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_reward_10.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_reward_3.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_reward_4.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_reward_5.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_share.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_taiko_3.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ms_ms_taiko_4.png`：二进制、图像、字体或图标资源。
+- `tasks/MysteryShop/ms/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MysteryShop/ms/things.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/MysteryShop/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Nian/assets.py`：Python 模块；主要定义 `NianAssets`。
+- `tasks/Nian/config.py`：Python 模块；主要定义 `NianConfig, Nian`。
+- `tasks/Nian/nian/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Nian/nian/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Nian/nian/nian_auto_matching.png`：二进制、图像、字体或图标资源。
+- `tasks/Nian/nian/nian_n_check.png`：二进制、图像、字体或图标资源。
+- `tasks/Nian/nian/nian_n_waiting.png`：二进制、图像、字体或图标资源。
+- `tasks/Nian/nian/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Nian/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Orochi/assets.py`：Python 模块；主要定义 `OrochiAssets`。
+- `tasks/Orochi/config.py`：Python 模块；主要定义 `UserStatus, Layer, OrochiConfig, SwitchSoulConfig, Orochi`。
+- `tasks/Orochi/o/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Orochi/o/o_form_team.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi_check_10.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi_check_11.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi_check_12.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi_check_13.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_orochi_wild_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_pet_present.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/o/o_shi_records.png`：二进制、图像、字体或图标资源。
+- `tasks/Orochi/page.py`：Python 模块。
+- `tasks/Orochi/res/list.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Orochi/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Orochi/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/OrochiMoans/assets.py`：Python 模块；主要定义 `OrochiMoansAssets`。
+- `tasks/OrochiMoans/config.py`：Python 模块；主要定义 `OrochiMoans`。
+- `tasks/OtherWorldTwilight/assets.py`：Python 模块；主要定义 `OtherWorldTwilightAssets`。
+- `tasks/OtherWorldTwilight/config.py`：Python 模块；主要定义 `OtherWorldTwilightConfig, OWTBattleConfig, OtherWorldTwilight`。
+- `tasks/OtherWorldTwilight/owt/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/OtherWorldTwilight/owt/owt_de_to_other_world.png`：二进制、图像、字体或图标资源。
+- `tasks/OtherWorldTwilight/owt/owt_owt_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/OtherWorldTwilight/owt/owt_owt_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/OtherWorldTwilight/owt/owt_owt_team.png`：二进制、图像、字体或图标资源。
+- `tasks/OtherWorldTwilight/owt/owt_owt_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/OtherWorldTwilight/page.py`：Python 模块。
+- `tasks/OtherWorldTwilight/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/Pets/assets.py`：Python 模块；主要定义 `PetsAssets`。
+- `tasks/Pets/config.py`：Python 模块；主要定义 `PetsConfig, Pets`。
+- `tasks/Pets/pet/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Pets/pet/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Pets/pet/pet_pet_claw.png`：二进制、图像、字体或图标资源。
+- `tasks/Pets/pet/pet_pet_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/Pets/pet/pet_pet_feast.png`：二进制、图像、字体或图标资源。
+- `tasks/Pets/pet/pet_pet_feed.png`：二进制、图像、字体或图标资源。
+- `tasks/Pets/pet/pet_pet_happy.png`：二进制、图像、字体或图标资源。
+- `tasks/Pets/pet/pet_pet_house.png`：二进制、图像、字体或图标资源。
+- `tasks/Pets/pet/pet_pet_play.png`：二进制、图像、字体或图标资源。
+- `tasks/Pets/pet/pet_pet_skip.png`：二进制、图像、字体或图标资源。
+- `tasks/Pets/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Quiz/assets.py`：Python 模块；主要定义 `QuizAssets`。
+- `tasks/Quiz/config.py`：Python 模块；主要定义 `QuizConfig, Quiz`。
+- `tasks/Quiz/debug.py`：Python 模块；主要定义 `remove_symbols, Debugger`。
+- `tasks/Quiz/quiz/alone_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/Quiz/quiz/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Quiz/quiz/entry.png`：二进制、图像、字体或图标资源。
+- `tasks/Quiz/quiz/fail_quit.png`：二进制、图像、字体或图标资源。
+- `tasks/Quiz/quiz/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Quiz/quiz/message.png`：二进制、图像、字体或图标资源。
+- `tasks/Quiz/quiz/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Quiz/quiz/quiz_share.png`：二进制、图像、字体或图标资源。
+- `tasks/Quiz/quiz/quiz_start.png`：二进制、图像、字体或图标资源。
+- `tasks/Quiz/script_task.py`：Python 模块；主要定义 `NoTicket, ScriptTask`。
+- `tasks/RealmRaid/assets.py`：Python 模块；主要定义 `RealmRaidAssets`。
+- `tasks/RealmRaid/config.py`：Python 模块；主要定义 `RaidMode, AttackNumber, WhenAttackFail, RaidConfig, RealmRaid`。
+- `tasks/RealmRaid/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RealmRaid/res/image2.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RealmRaid/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RealmRaid/res/partition.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RealmRaid/res/res_back_red.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_fresh.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_frog_medal.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_frog_raid.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_lock_2.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_0.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_1.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_2.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_3.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_3_2.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_3_3.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_4.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_5.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_medal_5_frog.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_realm_raid.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_rr_person.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_rr_three.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_shikigami.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_soul_raid.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/res/res_unlock_2.png`：二进制、图像、字体或图标资源。
+- `tasks/RealmRaid/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Restart/assets.py`：Python 模块；主要定义 `RestartAssets`。
+- `tasks/Restart/config.py`：Python 模块；主要定义 `HarvestConfig, TasksReset, LoginCharacterConfig, Restart`。
+- `tasks/Restart/config_scheduler.py`：Python 模块；主要定义 `RestartScheduler`。
+- `tasks/Restart/courtyard_affairs/courtyard_affairs_complete_tasks.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/courtyard_affairs/courtyard_affairs_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/courtyard_affairs/courtyard_affairs_daily.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/courtyard_affairs/courtyard_affairs_no_tasks.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/courtyard_affairs/courtyard_affairs_note.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/courtyard_affairs/courtyard_affairs_page.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/courtyard_affairs/courtyard_affairs_skip.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/courtyard_affairs/courtyard_affairs_success_claimed.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/courtyard_affairs/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Restart/harvest/harvest_back_pet_house.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_ap.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_chat_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_guild_reward.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_jade.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_mail.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_mail_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_mail_all.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_mail_copy.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_mail_open.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_mail_title.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_sign.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_sign_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_sign_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_sign_4.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_sign_999.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_soul.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_soul_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_soul_2.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_soul_3.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_harvest_zidu.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_mail_red_point.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_read_all_mail.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_special_mail_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_special_mail_open.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_system_mail_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/harvest_system_mail_open.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/harvest/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Restart/login.py`：Python 模块；主要定义 `LoginHandler`。
+- `tasks/Restart/login/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Restart/login/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Restart/login/login_charactars.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_courtyard.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_create_account.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_early_server.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_early_server_cancel.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_8.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_ensure_bind_phone.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_goto_bind_phone.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_load_down.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_onmyoji_genie.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_red_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_scrooll_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_scrooll_open.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_specific_serve.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/login_login_yellow_close.png`：二进制、图像、字体或图标资源。
+- `tasks/Restart/login/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Restart/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/RichMan/assets.py`：Python 模块；主要定义 `RichManAssets`。
+- `tasks/RichMan/config.py`：Python 模块；主要定义 `ThousandThings, Consignment, Scales, SpecialRoom, HonorRoom, FriendshipPoints, MedalRoom, Charisma`。
+- `tasks/RichMan/guild.py`：Python 模块；主要定义 `ButtonException, Guild`。
+- `tasks/RichMan/guild/guild_guild_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/guild/guild_guild_check_scrap.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/guild/guild_guild_close_red.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/guild/guild_guild_scrap.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/guild/guild_guild_shrine.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/guild/guild_guild_skin.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/guild/guild_guild_store.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/guild/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/guild/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/guild/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/bondlings.py`：Python 模块；主要定义 `Bondlings`。
+- `tasks/RichMan/mall/bondlings/bondlings_bl_buy_high.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/bondlings/bondlings_bl_buy_medium.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/bondlings/bondlings_bl_buy_souls.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/bondlings/bondlings_bl_buy_stone.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/bondlings/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/bondlings/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/charisma.py`：Python 模块；主要定义 `Charisma`。
+- `tasks/RichMan/mall/charisma/charisma_ch_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/charisma/charisma_ch_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/charisma/charisma_ch_check_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/charisma/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/consignment.py`：Python 模块；主要定义 `Consignment`。
+- `tasks/RichMan/mall/consignment/consignment_con_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/consignment/consignment_con_enter_check.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/consignment/consignment_con_ticket.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/consignment/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/consignment/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/friendship_points.py`：Python 模块；主要定义 `FriendshipPoints`。
+- `tasks/RichMan/mall/friendship_points/friendship_points_fs_broken.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/friendship_points/friendship_points_fs_red.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/friendship_points/friendship_points_fs_white_check.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/friendship_points/friendship_points_fs_white_click.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/friendship_points/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/honor.py`：Python 模块；主要定义 `Honor`。
+- `tasks/RichMan/mall/honor/honor_honor_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/honor/honor_honor_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/honor/honor_honor_white.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/honor/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/honor/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/mall.py`：Python 模块；主要定义 `Mall`。
+- `tasks/RichMan/mall/medal.py`：Python 模块；主要定义 `Medal`。
+- `tasks/RichMan/mall/medal/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/medal/medal_me_ap.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_broken.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_challenge_pass.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_check_ap.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_check_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_check_blue.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_check_souls.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_red.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_souls.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/medal_me_white.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/medal/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/navbar.py`：Python 模块；主要定义 `MallNavbar`。
+- `tasks/RichMan/mall/navbar/image_bottom.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/navbar/image_mall_resource.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/navbar/image_side.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/navbar/navbar_mall_bondlings_check.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_bondlings_on.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_bondlings_over.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_bondlings_sure.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_consignment.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_consignment_check.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_resource_ap.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_resource_charisma.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_resource_friends.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_resource_honor.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_resource_medal.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_scales_sure.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_sccales.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_sccales_check.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_sundry.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_mall_sundry_check.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_check_charisma.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_check_friends.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_check_honor.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_check_medal.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_check_special.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_suer_honor.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_sure_charisma.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_sure_friends.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_sure_medal.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/navbar_side_sure_special.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/navbar/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/navbar/ocr_legacy.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/scales.py`：Python 模块；主要定义 `Scales`。
+- `tasks/RichMan/mall/scales/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/scales/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/scales/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/scales/scales_sca_demon_boss_1.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_demon_boss_2.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_demon_boss_3.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_demon_boss_4.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_demon_boss_5.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_demon_boss_6.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_demon_boss_7.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_demon_buy.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_demon_souls.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_orochi_scales.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_picture_book.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_reward.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_select_1.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_select_2.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_select_3.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/scales/scales_sca_six_star.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/special.py`：Python 模块；主要定义 `Special`。
+- `tasks/RichMan/mall/special/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/special/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/mall/special/special_sp_buy_low.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/special/special_sp_buy_medium.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/special/special_sp_buy_totem.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/special/special_sp_swipe_check.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/mall/special/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/RichMan/shrine.py`：Python 模块；主要定义 `Shrine`。
+- `tasks/RichMan/shrine/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/shrine/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/shrine/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/shrine/shrine_center1.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_center2.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_buy_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_buy_up.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_buy_white_five.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_buy_white_four.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_check_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_check_white_five.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_check_white_four.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_confirm_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_confirm_white_five.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_confirm_white_four.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_next_period.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_white_five.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/shrine/shrine_s_white_four.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/thousand_things.py`：Python 模块；主要定义 `ThousandThings`。
+- `tasks/RichMan/tt/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/tt/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RichMan/tt/tt_tt_ap.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_black.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_borrow.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_borrow_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_buy_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_buy_up.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_check.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_configure.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_shikigami.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_shikigami_replace.png`：二进制、图像、字体或图标资源。
+- `tasks/RichMan/tt/tt_tt_ticket_bule.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/assets.py`：Python 模块；主要定义 `RyouToppaAssets`。
+- `tasks/RyouToppa/config.py`：Python 模块；主要定义 `RaidConfig, RyouToppa`。
+- `tasks/RyouToppa/dev/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RyouToppa/dev/dev_toppa_lock_team.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/dev/dev_toppa_unlock_team.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/dev/failure.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RyouToppa/dev/finished.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RyouToppa/dev/finished_1.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/dev/finished_2.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/dev/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RyouToppa/dev/loser_sign_1.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/dev/loser_sign_2.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/dev/res_toppa_record.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RyouToppa/res/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RyouToppa/res/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/RyouToppa/res/res_guild_orders_rewards.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/res_no_select_ryou.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/res_real_raid_refresh.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/res_ryou_reward.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/res_ryou_reward_90.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/res_ryou_toppa.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/res_select_ryou_button.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/res_start_toppa_button.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/res/res_success_penetration.png`：二进制、图像、字体或图标资源。
+- `tasks/RyouToppa/script_task.py`：Python 模块；主要定义 `random_delay, ScriptTask`。
+- `tasks/Script/assets.py`：Python 模块；主要定义 `ScriptAssets`。
+- `tasks/Script/config.py`：Python 模块；主要定义 `Script`。
+- `tasks/Script/config_antiban.py`：Python 模块；主要定义 `AntiBan`。
+- `tasks/Script/config_device.py`：Python 模块；主要定义 `PackageName, ScreenshotMethod, ControlMethod, EmulatorInfoType, Device`。
+- `tasks/Script/config_error.py`：Python 模块；主要定义 `Error`。
+- `tasks/Script/config_optimization.py`：Python 模块；主要定义 `WhenTaskQueueEmpty, ScheduleRule, Optimization`。
+- `tasks/Secret/assets.py`：Python 模块；主要定义 `SecretAssets`。
+- `tasks/Secret/config.py`：Python 模块；主要定义 `Scheduler, SecretConfig, Secret`。
+- `tasks/Secret/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Secret/se/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Secret/se/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Secret/se/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Secret/se/se_se_battle_win.png`：二进制、图像、字体或图标资源。
+- `tasks/Secret/se/se_se_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/Secret/se/se_se_finished_1.png`：二进制、图像、字体或图标资源。
+- `tasks/Secret/se/se_se_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/Secret/se/se_se_jade.png`：二进制、图像、字体或图标资源。
+- `tasks/Secret/se/se_se_jade_last.png`：二进制、图像、字体或图标资源。
+- `tasks/Secret/se/se_se_placement.png`：二进制、图像、字体或图标资源。
+- `tasks/Secret/se/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/README.md`：Markdown 项目说明或开发文档。
+- `tasks/SixRealms/assets.py`：Python 模块；主要定义 `SixRealmsAssets`。
+- `tasks/SixRealms/common.py`：Python 模块；主要定义 `MoonSeaType`。
+- `tasks/SixRealms/config.py`：Python 模块；主要定义 `SixRealmsGate, SixRealms`。
+- `tasks/SixRealms/gate1/animate.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/gate1/boss.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/gate1/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/gate1/gate1_back_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_battle_again.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_battle_giveup.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_get_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_share.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_shutu.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_skip.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_team_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_team_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_boss_use_double.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_coin.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_exit_sixrealms.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_island_tag_flag.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_m_store.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_m_store_activity.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mconinue.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_menter.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mfirst_skill.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mshouzu.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mshouzu_select.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mshuten.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mskip.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mstart.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mstart_check.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mstart_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mstart_confirm2.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_mstart_uncheck.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_prepare_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_select_0.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_select_1.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_select_2.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_select_3.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_select_shikigami_and_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_skill101.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_skill102.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_skill105.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/gate1_skill_refresh.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/gate1/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/gate1/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/gate1/skills.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/gate1/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/l101/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/l101/l101_store_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l101/l101_store_refresh.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l101/l101_store_skill_101.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l101/l101_store_stable_flag.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l101/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/l102/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/l102/l102_.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l102/l102_coin_right_top.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l102/l102_imitate.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l102/l102_imitate_1.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l102/l102_imitate_success.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l103/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/l103/l103_exit.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l104/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SixRealms/l104/l104_battle_team_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l104/l104_battle_team_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/l104/l104_npc_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/SixRealms/moon_sea/l101.py`：Python 模块；主要定义 `MoonSeaL101`。
+- `tasks/SixRealms/moon_sea/l102.py`：Python 模块；主要定义 `MoonSeaL102`。
+- `tasks/SixRealms/moon_sea/l103.py`：Python 模块；主要定义 `MoonSeaL103`。
+- `tasks/SixRealms/moon_sea/l104.py`：Python 模块；主要定义 `MoonSeaL104`。
+- `tasks/SixRealms/moon_sea/l105.py`：Python 模块；主要定义 `MoonSeaL105`。
+- `tasks/SixRealms/moon_sea/map.py`：Python 模块；主要定义 `MoonSeaMap`。
+- `tasks/SixRealms/moon_sea/moon_sea.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/SixRealms/moon_sea/skills.py`：Python 模块；主要定义 `MoonSeaSkills`。
+- `tasks/SixRealms/oas_ocr.py`：Python 模块；主要定义 `apply_mask, VerticalText, StoneOcr`。
+- `tasks/SixRealms/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/Sougenbi/assets.py`：Python 模块；主要定义 `SougenbiAssets`。
+- `tasks/Sougenbi/config.py`：Python 模块；主要定义 `SougenbiClass, SougenbiConfig, Sougenbi`。
+- `tasks/Sougenbi/s/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Sougenbi/s/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Sougenbi/s/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/Sougenbi/s/s_s_check_sougenbi.png`：二进制、图像、字体或图标资源。
+- `tasks/Sougenbi/s/s_s_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/Sougenbi/s/s_s_fire_anger.png`：二进制、图像、字体或图标资源。
+- `tasks/Sougenbi/s/s_s_fire_foolery.png`：二进制、图像、字体或图标资源。
+- `tasks/Sougenbi/s/s_s_fire_greed.png`：二进制、图像、字体或图标资源。
+- `tasks/Sougenbi/s/s_s_sougenbi.png`：二进制、图像、字体或图标资源。
+- `tasks/Sougenbi/s/s_s_team_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/Sougenbi/s/s_s_team_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/Sougenbi/script_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+- `tasks/SoulsTidy/assets.py`：Python 模块；主要定义 `SoulsTidyAssets`。
+- `tasks/SoulsTidy/config.py`：Python 模块；主要定义 `SimpleTidy, SoulsTidy`。
+- `tasks/SoulsTidy/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/SoulsTidy/simple/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SoulsTidy/simple/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SoulsTidy/simple/long_click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SoulsTidy/simple/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/SoulsTidy/simple/simple_st_abandoned_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_bongna.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_cat.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_donate.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_feed_now.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_god_present.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_gold.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_greed.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_greed_close.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_greed_habit.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_level_0.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_luck.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_replace.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_small_luck.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_soul_overflow.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_soul_stack.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_soul_stack_1.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_souls.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_souls_close.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_tidy.png`：二进制、图像、字体或图标资源。
+- `tasks/SoulsTidy/simple/simple_st_unselected.png`：二进制、图像、字体或图标资源。
+- `tasks/Tako/assets.py`：Python 模块；主要定义 `TakoAssets`。
+- `tasks/Tako/config.py`：Python 模块；主要定义 `TakoConfig, Tako`。
+- `tasks/Tako/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/TalismanPass/assets.py`：Python 模块；主要定义 `TalismanPassAssets`。
+- `tasks/TalismanPass/config.py`：Python 模块；主要定义 `Scheduler, LevelReward, TalismanConfig, TalismanPass`。
+- `tasks/TalismanPass/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/TalismanPass/tp/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/TalismanPass/tp/tp_overflow_confirme.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_red_point_day.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_red_point_level.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_red_point_task.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_red_point_week.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_exp.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_get_all.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_goto.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_level_1.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_level_2.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_level_3.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_soul_1.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_soul_2.png`：二进制、图像、字体或图标资源。
+- `tasks/TalismanPass/tp/tp_tp_soul_3.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/assets.py`：Python 模块；主要定义 `TrueOrochiAssets`。
+- `tasks/TrueOrochi/config.py`：Python 模块；主要定义 `GreenMarkType, TrueOrochiScheduler, TrueOrochiConfig, TrueOrochi`。
+- `tasks/TrueOrochi/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/TrueOrochi/st/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/TrueOrochi/st/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/TrueOrochi/st/st_find_ts.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_module.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_auto_false.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_auto_true.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_create_room.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_fire_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_fire_prepare.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_frame.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_green_1.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_green_2.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_green_3.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_green_4.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_green_5.png`：二进制、图像、字体或图标资源。
+- `tasks/TrueOrochi/st/st_st_green_6.png`：二进制、图像、字体或图标资源。
+- `tasks/Utils/assets.py`：Python 模块；主要定义 `UtilsAssets`。
+- `tasks/Utils/config_enum.py`：Python 模块；主要定义 `ShikigamiClass, DemonClass`。
+- `tasks/Utils/post_diagnotor.py`：Python 模块；主要定义 `AnalyzeType, PostDiagnotor`。
+- `tasks/WantedQuests/assets.py`：Python 模块；主要定义 `WantedQuestsAssets`。
+- `tasks/WantedQuests/chanllenge/chanllenge_wqc_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/chanllenge/chanllenge_wqc_lock.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/chanllenge/chanllenge_wqc_unlock.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/chanllenge/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WantedQuests/config.py`：Python 模块；主要定义 `CooperationType, CooperationSelectMask, CooperationSelectMaskDescription, LayerLimit, WantedQuestsConfig, WantedQuests`。
+- `tasks/WantedQuests/explore.py`：Python 模块；主要定义 `ExploreWantedBoss, WQExplore`。
+- `tasks/WantedQuests/invite/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WantedQuests/invite/invite_wq_invite_1.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/invite_wq_invite_2.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/invite_wq_invite_3.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WantedQuests/invite/wq_cooperation_type_cat_food.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_cooperation_type_dog_food.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_cooperation_type_gold.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_cooperation_type_jade.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_cooperation_type_sushi.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_invite_cancel.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_invite_diff_svr.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_invite_diff_svr_highlight.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_invite_ensure.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_invite_friend_list_appear.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_invite_same_svr.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/invite/wq_invite_selected.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/WantedQuests/wq/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WantedQuests/wq/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WantedQuests/wq/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WantedQuests/wq/se_image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WantedQuests/wq/swipe.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WantedQuests/wq/wq_goto_1.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_goto_2.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_goto_3.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_goto_4.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_tarce_disenable.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_trace_disable.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_trace_enable.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_trace_false.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_trace_one_check_opened.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_trace_one_disable.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_trace_one_enable.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_trace_one_realworld.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_trace_true.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_wq_box.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_wq_check_task.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_wq_d1111.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_wq_done.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_wq_nian.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_wq_seal.png`：二进制、图像、字体或图标资源。
+- `tasks/WantedQuests/wq/wq_wqse_fire.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/area_boss/area_boss_wt_ab_jade.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/area_boss/area_boss_wt_ab_wechat.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/area_boss/area_boss_wt_day_battle.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/area_boss/area_boss_wt_no_day.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/area_boss/area_boss_wt_share_ab.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/area_boss/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/area_boss/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/assets.py`：Python 模块；主要定义 `WeeklyTriflesAssets`。
+- `tasks/WeeklyTrifles/broken_amulet/broken_amulet_bm_again.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/broken_amulet/broken_amulet_bm_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/broken_amulet/broken_amulet_bm_enter.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/broken_amulet/broken_amulet_bmt_check.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/broken_amulet/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/broken_amulet/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/collect/click.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/collect/collect_wt_collect_wechat.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/collect/collect_wt_logo.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/collect/collect_wt_qr_code.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/collect/collect_wt_share.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/collect/collect_wt_shikiagmi.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/collect/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/config.py`：Python 模块；主要定义 `Scheduler, Trifles, WeeklyTrifles`。
+- `tasks/WeeklyTrifles/script_task.py`：Python 模块；主要定义 `ScriptTask`。
+- `tasks/WeeklyTrifles/secret/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/secret/secret_wt_enter_se.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/secret/secret_wt_se_jade.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/secret/secret_wt_se_rank.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/secret/secret_wt_se_share.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/secret/secret_wt_se_wechat.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/image.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/touch_fish/ocr.json`：JSON 数据、元数据或工具输入文件。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_check_touch_fish.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_guild_goto_tf.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_wt_fold_window.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_wt_happy_get.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_wt_last_save.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_wt_open_fold_window.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_wt_save_all.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_wt_tf_confirm.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_wt_tf_goto_main.png`：二进制、图像、字体或图标资源。
+- `tasks/WeeklyTrifles/touch_fish/touch_fish_wt_tf_save_success.png`：二进制、图像、字体或图标资源。
+- `tasks/base_task.py`：Python 脚本或模块，具体职责以文件中的入口和调用方为准。
+### `tests/`
+
+- `tests/module/atom/test_click.py`：Python 模块；主要定义 `test_coord_in_excluded_selects_a_matching_click_and_uses_its_roi_front, test_coord_in_excluded_matches_asset_attribute_name, test_coord_in_excluded_randomly_selects_from_multiple_matches, test_coord_in_excluded_rejects_unknown_area, test_exclude_click_string_contains_excluded_click_names, test_exclude_click_strategies_and_distributions, test_exclude_click_uses_union_of_overlapping_roi_back_regions, test_exclude_click_clips_roi_back_to_screen`。
+- `tests/tasks/Component/GeneralBattle/test_battle_wait.py`：Python 模块；主要定义 `reset_battle_wait_plan, test_default_plan_contains_default_hooks_and_sequence, test_decorator_passes_its_plan_to_the_wrapped_function, test_with_context_uses_a_temporary_plan_and_restores_the_default_plan, test_event_and_strategy_can_be_configured_with_both_supported_forms, test_an_event_cannot_be_configured_with_two_strategies, test_setup_runs_before_the_wait_loop, test_custom_hook_is_resolved_and_executed_in_the_configured_sequence`。
+- `tests/tasks/Component/GeneralBattle/test_randomclick_gate.py`：Python 模块；主要定义 `FakeSelf, make_pub, make_pri, make_gate, test_type_mismatch_raises, test_not_in_battle_skips, test_first_call_resolves_delay_and_limit, test_start_delay_blocks_until_first_allowed_time`。
+- `tests/test_hero_test_skill_fallback.py`：Exercise HeroTest selection loops without a Config, Device or running game.；主要定义 `ScriptedHeroTest, HeroTestSkillFallbackTests`。
+- `tests/test_ocr_filter.py`：Python 模块；主要定义 `boxed_text, test_exact_filter_does_not_match_a_partial_nickname, test_exact_filter_matches_the_complete_nickname`。
+- `tests/test_switch_onmyoji.py`：SwitchOnmyoji must have a bounded exit path. Both loops in `SwitchOnmyoji.switch_role` used to be unconditional `while True`. When the onmyoji/hero tab cannot be reached (stale ass；主要定义 `ScriptedSwitch, test_switch_role_raises_when_battle_list_never_appears, test_switch_role_raises_when_check_icon_never_appears, test_switch_role_still_switches_when_the_flow_is_healthy, test_switch_role_clicks_the_battle_icon_when_confirm_icon_is_absent, test_timeouts_are_not_shared_between_instances`。
+
+## 4. 阅读与修改建议
+
+1. 新增或修改任务时，先阅读对应 `tasks/<活动>/` 文件，再追踪其继承的 `module/` 基类和资源目录。
+2. 涉及点击、滑动、OCR 或页面识别的改动，应同时检查对应图片资源和 `tests/` 回归用例。
+3. 修改参数时区分 `module/config/argument/` 的默认/覆盖层与任务目录中的局部配置，避免把用户配置写入源码。
+4. 修改 Fluent UI 时同时查看 `fluentui/CMakeLists.txt`、`src/` 和 `example/`，确认组件、构建目标和示例行为一致。
+5. 运行 `python -m pytest` 验证 Python 改动；设备相关流程还应在目标模拟器或真机上进行集成验证。
