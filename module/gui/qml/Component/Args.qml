@@ -71,7 +71,18 @@ Item {
                 }
 
                 var object = null
-                if(arg.type === "string"){
+                // Older server builds expose list fields as strings.  Use the
+                // field name as a compatibility fallback so account editing
+                // remains available while the server is being upgraded.
+                if(arg.name === "accounts" || arg.type === "array"){
+                    object = account_list_item.createObject(group_column)
+                    if(object === null){
+                        console.error("can not create component account_list_item", arg.title)
+                        return
+                    }
+                    object.groupName = groupName
+                }
+                else if(arg.type === "string"){
                     object = string_item.createObject(group_column)
                     if(object === null){
                         console.error("can not create component string_item", arg.title)
@@ -113,16 +124,6 @@ Item {
                         return
                     }
                 }
-                else if(arg.type === "array"){
-                    object = account_list_item.createObject(group_column)
-                    if(object === null){
-                        console.error("can not create component account_list_item", arg.title)
-                        return
-                    }
-                    object.groupName = groupName
-                }
-
-
                 if(object === null){
                     console.error("can not create component ", arg.title)
                     return
@@ -646,6 +647,14 @@ Item {
                     return
                 }
                 accountList = modelData.value || []
+                if(typeof accountList === "string"){
+                    try{
+                        accountList = JSON.parse(accountList)
+                    }catch(error){
+                        accountList = []
+                        console.error("invalid game account list", error)
+                    }
+                }
                 account_title.text = qsTr(modelData.title)
                 account_description.text = modelData.description ? qsTr(modelData.description) : ""
             }

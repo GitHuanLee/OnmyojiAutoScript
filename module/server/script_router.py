@@ -2,6 +2,7 @@
 # @author runhey
 # github https://github.com/runhey
 import asyncio
+import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi import WebSocket, WebSocketDisconnect
@@ -148,6 +149,10 @@ async def script_task(script_name: str, task: str, group: str, argument: str, ty
                 value = TimeDelta(days=day, hours=date_time.hour, minutes=date_time.minute, seconds=date_time.second)
             case 'time':
                 value = datetime.strptime(value, '%H:%M:%S').time()
+            case 'array':
+                # 复杂配置（如全局游戏账号列表）通过 JSON 传输，保持条目
+                # 的账号、密码和平台字段结构，交由 Pydantic 做最终校验。
+                value = json.loads(value) if isinstance(value, str) else value
             case _: pass
     except Exception as e:
         # 类型不正确
