@@ -332,9 +332,17 @@ class ConfigModel(ConfigBase):
                 item["title"] = value["title"] if "title" in value else inflection.underscore(key)
                 if "description" in value:
                     item["description"] = value["description"]
-                item["default"] = value["default"]
-                item["value"] = jsons[key] if key in jsons else value["default"]
+                # Pydantic omits ``default`` from the JSON schema for fields using
+                # ``default_factory`` (for example the global account list).  The
+                # API still needs a stable default/value pair for the GUI contract.
+                default_value = value.get("default")
+                if "default" not in value:
+                    default_value = jsons.get(key, [] if value.get("type") == "array" else None)
+                item["default"] = default_value
+                item["value"] = jsons[key] if key in jsons else default_value
                 item["type"] = value["type"] if "type" in value else "enum"
+                if "items" in value:
+                    item["items"] = value["items"]
                 if '$ref' in value:  # list
                     enum_key = re.search(r"/([^/]+)$", value['$ref']).group(1)
                     item["enumEnum"] = definitions[enum_key]["enum"]
