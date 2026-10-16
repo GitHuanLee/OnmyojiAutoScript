@@ -7,6 +7,12 @@ import '../Global'
 
 Item{
     id: taskList
+    // 新增任务的翻译在旧版 qm 文件未重新编译时仍保持中文显示。
+    function displayName(value) {
+        if (value === "Small Account Daily") return "小号日常"
+        if (value === "JadeDetection") return "勾协探测"
+        return qsTr(value)
+    }
     signal click(string title)
     onClick: {
 
@@ -30,7 +36,7 @@ Item{
             property var argumentValue: {""}
             property alias model: groupModel
             expand: true
-            headerText: qsTr(groupTitle)
+            headerText: taskList.displayName(groupTitle)
             width: contentScrollable.width
             contentHeight: groupGridView.height + 20
             ListModel{
@@ -81,7 +87,7 @@ Item{
                     top: parent.top
                     topMargin: 6
                 }
-                text: qsTr( model.task)
+                text: taskList.displayName(model.task)
                 font: FluTextStyle.BodyStrong
             }
             FluText{
