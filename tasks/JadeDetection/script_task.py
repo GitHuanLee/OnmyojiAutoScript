@@ -1,5 +1,5 @@
 from module.atom.click import RuleClick
-from module.exception import RequestHumanTakeover, TaskEnd
+from module.exception import TaskEnd
 from module.logger import logger
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.GameUi.game_ui import GameUi
@@ -11,7 +11,7 @@ from tasks.JadeDetection.assets import JadeDetectionAssets
 class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
     """小号日常的勾协探测任务。
 
-    任务从当前配置的全局账号文件读取账号，按文件顺序完成“用户中心→切换账号→常用账号→
+    任务从当前配置的全局账号文件读取账号，按文件顺序完成“进入游戏页→用户中心→切换账号→账号列表→
     账号匹配→登录→登录处理”流程。账号选择只依赖当前客户端已保存的账号，密码字段不在此处落盘
     或输入；页面异常交给统一调度器处理，避免多个任务各自实现登录重试。
     """
@@ -38,15 +38,13 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
         :param account: 当前账号配置；`account` 必填，`account_type` 决定 OCR 比对规则，`platform` 决定
                         苹果或安卓平台按钮。
         :return: 找到并点击目标账号后返回 True；账号列表滚动到底仍未匹配返回 False。
-        :raises RequestHumanTakeover: 登录处理连续失败或页面需要人工处理时向上抛出。
+        :raises Exception: 登录处理失败或页面无法恢复时由统一调度器处理。
         """
-        # 从庭院头像进入用户中心，再按需求中的五张模板逐步推进。
-        self.ui_click(self.C_SA_EG_PROFILE_PHOTO, self.I_JD_USER_CENTER, interval=2, timeout=20)
-        if not self.ui_click(self.I_JD_USER_CENTER, self.I_JD_SWITCH_ACCOUNT, interval=2, timeout=20):
+        # 入口是进入游戏页，点击用户中心并确认切换账号资源出现。
+        if not self.ui_click(self.C_SA_LOGIN_FORM_USER_CENTER, self.I_JD_SWITCH_ACCOUNT, interval=2, timeout=20):
             return False
-        if not self.ui_click(self.I_JD_SWITCH_ACCOUNT, self.I_JD_COMMON, interval=2, timeout=20):
-            return False
-        if not self.ui_click(self.I_JD_COMMON, self.I_SA_ACCOUNT_LOGIN_BTN, interval=1.5, timeout=20):
+        # 点击切换账号，确认账号选择页的图1下拉资源出现。
+        if not self.ui_click(self.I_JD_SWITCH_ACCOUNT, self.I_JD_ACCOUNT_DROPDOWN, interval=2, timeout=20):
             return False
 
         if not self._select_account(account):
@@ -56,7 +54,7 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
         platform_button = self.I_JD_APPLE if account.platform == GameAccountPlatform.IOS else self.I_SA_LOGIN_FORM_ANDROID
         if not self.ui_click(self.I_JD_LOGIN, platform_button, interval=1.5, timeout=20):
             return False
-        if not self.ui_click(platform_button, self.I_CHECK_LOGIN_FORM, interval=1.5, timeout=20):
+        if not self.ui_click(platform_button, self.I_JD_ENTER_GAME, interval=1.5, timeout=20):
             return False
 
         # app_handle_login 负责登录页弹窗、区服选择和进入庭院后的收取流程。
@@ -74,8 +72,8 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
         for _ in range(30):
             self.screenshot()
             # 下拉菜单未展开时先打开；点击“常用”后通常已展开，此分支兼容动画尚未完成的界面。
-            if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED):
-                self.appear_then_click(self.I_SA_ACCOUNT_DROP_DOWN_CLOSED, interval=1)
+            if self.appear(self.I_JD_ACCOUNT_DROPDOWN):
+                self.appear_then_click(self.I_JD_ACCOUNT_DROPDOWN, interval=1)
                 continue
 
             results = account_list.detect_and_ocr(self.device.image)
@@ -99,12 +97,12 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
                 return True
 
             # OCR 结果不再变化时说明已经到列表底部，避免无限上滑。
+            if self.appear(self.I_JD_ACCOUNT_BOTTOM):
+                return False
             if texts and texts == last_ocr:
                 return False
             last_ocr = texts
-            if self.appear(self.I_SA_ACCOUNT_DROP_DOWN_ADD_ACCOUNT):
-                return False
-            self.swipe(self.S_SA_ACCOUNT_LIST_UP, interval=1.5)
+            self.swipe(self.S_JD_ACCOUNT_LIST_UP, interval=1.5)
         return False
 
     @staticmethod

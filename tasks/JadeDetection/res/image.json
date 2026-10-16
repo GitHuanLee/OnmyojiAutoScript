@@ -18,13 +18,13 @@
     "description": "切换账号按钮"
   },
   {
-    "itemName": "jd_common",
-    "imageName": "jd_common.png",
-    "roiFront": "0,0,79,38",
+    "itemName": "jd_account_dropdown",
+    "imageName": "jd_account_dropdown.png",
+    "roiFront": "0,0,66,34",
     "roiBack": "0,0,1280,720",
     "method": "Template matching",
     "threshold": 0.75,
-    "description": "常用账号标签"
+    "description": "账号列表下拉按钮"
   },
   {
     "itemName": "jd_login",
@@ -43,5 +43,23 @@
     "method": "Template matching",
     "threshold": 0.75,
     "description": "苹果登录平台按钮"
+  },
+  {
+    "itemName": "jd_account_bottom",
+    "imageName": "jd_account_bottom.png",
+    "roiFront": "0,0,124,36",
+    "roiBack": "0,0,1280,720",
+    "method": "Template matching",
+    "threshold": 0.75,
+    "description": "账号列表到底部的添加新账号标志"
+  },
+  {
+    "itemName": "jd_enter_game",
+    "imageName": "jd_enter_game.png",
+    "roiFront": "0,0,158,44",
+    "roiBack": "0,0,1280,720",
+    "method": "Template matching",
+    "threshold": 0.75,
+    "description": "进入游戏按钮标志"
   }
 ]
