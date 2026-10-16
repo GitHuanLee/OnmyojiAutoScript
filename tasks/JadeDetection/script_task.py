@@ -9,6 +9,15 @@ from tasks.JadeDetection.assets import JadeDetectionAssets
 from tasks.WantedQuests.script_task import ScriptTask as WantedQuestsTask
 
 
+class JadeDetectionLoginHandler(LoginHandler):
+    """适配嵌套登录流程的处理器。
+
+    `BaseTask` 会根据处理器类所在任务目录校验 `running_task`。JadeDetection
+    复用 Restart 的登录逻辑时必须通过当前任务目录下的子类实例化，才能避免
+    将全局配置中的运行任务误判为 Restart。
+    """
+
+
 class AccountWantedQuestsTask(WantedQuestsTask):
     """在勾协探测账号流程中运行悬赏任务，并由外层统一负责调度。"""
 
@@ -77,7 +86,7 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
         self.appear_then_click(platform_button, interval=1.5)
 
         # app_handle_login 负责加载页、登录页弹窗、区服选择和进入庭院后的收取流程。
-        LoginHandler(config=self.config, device=self.device).app_handle_login()
+        JadeDetectionLoginHandler(config=self.config, device=self.device).app_handle_login()
         return True
 
     def _select_account(self, account: GameAccount) -> bool:
