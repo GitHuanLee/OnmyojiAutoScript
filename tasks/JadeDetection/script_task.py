@@ -88,12 +88,18 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
         :return: 找到并点击目标账号后返回 True；账号列表滚动到底仍未匹配返回 False。
         :raises Exception: 登录处理失败或页面无法恢复时由统一调度器处理。
         """
-        # 入口是进入游戏页，点击用户中心并确认切换账号资源出现。
-        if not self.ui_click(self.C_SA_LOGIN_FORM_USER_CENTER, self.I_JD_SWITCH_ACCOUNT, interval=2, timeout=20):
-            return False
-        # 点击切换账号，确认账号选择页的图1下拉资源出现。
-        if not self.ui_click(self.I_JD_SWITCH_ACCOUNT, self.I_JD_ACCOUNT_DROPDOWN, interval=2, timeout=20):
-            return False
+        # ExitGame 完成后已经处于账号选择页，避免再次点击登录页用户中心。
+        self.screenshot()
+        account_page_ready = self.appear(self.I_SA_NETEASE_GAME_LOGO) and self.appear(self.I_SA_ACCOUNT_LOGIN_BTN)
+        if not account_page_ready:
+            # 入口仍在登录页时，先打开用户中心，再进入账号切换页。
+            if not self.ui_click(self.C_SA_LOGIN_FORM_USER_CENTER, self.I_JD_SWITCH_ACCOUNT,
+                                 interval=2, timeout=20):
+                return False
+            # 点击切换账号，确认账号选择页的下拉控件出现。
+            if not self.ui_click(self.I_JD_SWITCH_ACCOUNT, self.I_JD_ACCOUNT_DROPDOWN,
+                                 interval=2, timeout=20):
+                return False
 
         if not self._select_account(account):
             return False
