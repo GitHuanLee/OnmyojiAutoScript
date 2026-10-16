@@ -72,10 +72,11 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
         platform_button = self.I_JD_APPLE if account.platform == GameAccountPlatform.IOS else self.I_SA_LOGIN_FORM_ANDROID
         if not self.ui_click(self.I_JD_LOGIN, platform_button, interval=1.5, timeout=20):
             return False
-        if not self.ui_click(platform_button, self.I_JD_ENTER_GAME, interval=1.5, timeout=20):
-            return False
+        # 平台按钮点击后可能直接进入加载页，也可能先显示区服/进入游戏按钮；
+        # 统一交给 LoginHandler 处理，避免依赖单一版本的“进入游戏”模板。
+        self.appear_then_click(platform_button, interval=1.5)
 
-        # app_handle_login 负责登录页弹窗、区服选择和进入庭院后的收取流程。
+        # app_handle_login 负责加载页、登录页弹窗、区服选择和进入庭院后的收取流程。
         LoginHandler(config=self.config, device=self.device).app_handle_login()
         return True
 
