@@ -6,6 +6,20 @@ from tasks.GameUi.game_ui import GameUi
 from tasks.Restart.login import LoginHandler
 from tasks.GlobalGame.config import GameAccount, GameAccountPlatform, GameAccountType
 from tasks.JadeDetection.assets import JadeDetectionAssets
+from tasks.WantedQuests.script_task import ScriptTask as WantedQuestsTask
+
+
+class AccountWantedQuestsTask(WantedQuestsTask):
+    """在勾协探测账号流程中运行悬赏任务，并由外层统一负责调度。"""
+
+    def next_run(self) -> None:
+        """阻止嵌套悬赏任务覆盖 JadeDetection 的下一次运行时间。
+
+        悬赏任务在完成或无可执行任务时都会调用此钩子；该账号流程的调度由外层
+        JadeDetection 统一设置，因此这里不单独安排 WantedQuests。
+        """
+        # 保留 WantedQuests 的任务执行逻辑，但让外层任务独占调度时间的写入。
+        return None
 
 
 class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
@@ -20,8 +34,8 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
         """按账号文件顺序执行勾协探测并结束本次任务。
 
         业务步骤是读取账号集合、逐个打开切换账号页面、滚动 OCR 列表查找账号、选择登录平台，
-        再调用统一的 `app_handle_login()` 等待进入庭院。找不到单个账号时记录日志并继续后续账号；
-        账号文件错误或登录流程请求人工接管时直接向上层抛出异常。
+        再调用统一的 `app_handle_login()` 等待进入庭院，并运行悬赏任务。找不到单个账号时记录日志
+        并继续后续账号；账号文件错误或登录流程请求人工接管时直接向上层抛出异常。
         """
         accounts = self.config.load_game_accounts()
         for index, account in enumerate(accounts, start=1):
@@ -29,6 +43,10 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
             if not self._switch_to_account(account):
                 logger.warning("Account not found in client account list: %s", account.account)
                 continue
+            try:
+                AccountWantedQuestsTask(config=self.config, device=self.device).run()
+            except TaskEnd:
+                logger.info("Wanted quests completed for account: %s", account.account)
         self.set_next_run(task="JadeDetection", success=True, finish=True)
         raise TaskEnd("JadeDetection")
 
