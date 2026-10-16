@@ -2,11 +2,13 @@ from module.atom.click import RuleClick
 from module.exception import TaskEnd
 from module.logger import logger
 from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
+from tasks.Component.SwitchAccount.exit_game import ExitGame
 from tasks.GameUi.game_ui import GameUi
 from tasks.Restart.login import LoginHandler
 from tasks.GlobalGame.config import GameAccount, GameAccountPlatform, GameAccountType
 from tasks.JadeDetection.assets import JadeDetectionAssets
 from tasks.WantedQuests.script_task import ScriptTask as WantedQuestsTask
+from tasks.GameUi.page import page_login, page_main
 
 
 class JadeDetectionLoginHandler(LoginHandler):
@@ -49,6 +51,8 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
         accounts = self.config.load_game_accounts()
         for index, account in enumerate(accounts, start=1):
             logger.info("Jade detection account %s/%s: %s", index, len(accounts), account.account)
+            if index > 1:
+                self._prepare_account_switch()
             if not self._switch_to_account(account):
                 logger.warning("Account not found in client account list: %s", account.account)
                 continue
@@ -58,6 +62,23 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets):
                 logger.info("Wanted quests completed for account: %s", account.account)
         self.set_next_run(task="JadeDetection", success=True, finish=True)
         raise TaskEnd("JadeDetection")
+
+    def _prepare_account_switch(self) -> None:
+        """在处理下一个账号前恢复到账号切换页面。
+
+        :return: 无返回值；成功后当前页面应显示账号切换列表。
+        :raises Exception: 页面导航或设备操作无法恢复时交给任务调度器处理。
+        """
+        # 悬赏结束后通常停留在庭院；其他异常页面先通过统一导航回到庭院。
+        current_page = self.get_current_page(fallback=True)
+        if current_page == page_login:
+            # 登录页的进入钩子默认创建 Restart 处理器，会触发嵌套任务名校验；
+            # 这里显式使用当前任务的适配处理器完成登录。
+            JadeDetectionLoginHandler(config=self.config, device=self.device).app_handle_login()
+        elif current_page != page_main:
+            self.goto_page(page_main)
+        # ExitGame 按既有流程点击右上角头像、用户中心和切换账号按钮。
+        ExitGame.exitGame(self)
 
     def _switch_to_account(self, account: GameAccount) -> bool:
         """执行单个账号的界面切换、账号匹配和登录。
