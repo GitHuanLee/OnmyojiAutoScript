@@ -22,23 +22,35 @@ class GameAccountPlatform(str, Enum):
     ANDROID = 'Android'
 
 
+class GameAccountType(str, Enum):
+    """标识网易账号的登录账号类型，用于区分邮箱和手机号的 OCR 比对策略。"""
+
+    EMAIL = 'email'
+    PHONE = 'phone'
+
+
 class GameAccount(BaseModel):
-    """保存一个游戏账号的登录凭据和客户端平台。"""
+    """保存一个游戏账号的登录凭据、账号类型和客户端平台。"""
 
     account: str = Field(default='', title='Game Account', description='game_account_help')
     password: str = Field(default='', title='Game Password', description='game_password_help')
+    account_type: GameAccountType = Field(default=GameAccountType.EMAIL,
+                                          title='Account Type',
+                                          description='game_account_type_help')
     platform: GameAccountPlatform = Field(default=GameAccountPlatform.ANDROID,
                                           title='Account Platform',
                                           description='game_account_platform_help')
 
 
 class GameAccountSettings(BaseModel):
-    """保存账号文件地址，并按需读取外部账号凭据。"""
+    """保存当前配置内的账号集合，并兼容按需读取外部账号文件。"""
 
     model_config = ConfigDict(validate_assignment=True)
 
     account_file: str = Field(default='config/accounts.json', title='Account File',
                                description='account_file_help')
+    accounts: list[GameAccount] = Field(default_factory=list, title='Game Accounts',
+                                        description='game_accounts_help')
 
     def load_accounts(self, base_dir: Path | None = None) -> list[GameAccount]:
         """读取并校验外部账号文件，文件内容不得写回主配置。
@@ -48,6 +60,9 @@ class GameAccountSettings(BaseModel):
         :return: 按文件顺序排列的账号列表。
         :raises ValueError: 文件不存在、格式错误或账号字段校验失败。
         """
+        # 配置内集合优先，保证任务读取当前配置时保持用户填写的顺序。
+        if self.accounts:
+            return list(self.accounts)
         path = Path(self.account_file)
         if not path.is_absolute():
             path = (base_dir or Path.cwd()) / path

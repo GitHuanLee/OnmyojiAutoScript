@@ -1,0 +1,47 @@
+[
+  {
+    "itemName": "jd_user_center",
+    "imageName": "jd_user_center.png",
+    "roiFront": "0,0,81,60",
+    "roiBack": "0,0,1280,720",
+    "method": "Template matching",
+    "threshold": 0.75,
+    "description": "用户中心按钮"
+  },
+  {
+    "itemName": "jd_switch_account",
+    "imageName": "jd_switch_account.png",
+    "roiFront": "0,0,139,61",
+    "roiBack": "0,0,1280,720",
+    "method": "Template matching",
+    "threshold": 0.75,
+    "description": "切换账号按钮"
+  },
+  {
+    "itemName": "jd_common",
+    "imageName": "jd_common.png",
+    "roiFront": "0,0,79,38",
+    "roiBack": "0,0,1280,720",
+    "method": "Template matching",
+    "threshold": 0.75,
+    "description": "常用账号标签"
+  },
+  {
+    "itemName": "jd_login",
+    "imageName": "jd_login.png",
+    "roiFront": "0,0,139,61",
+    "roiBack": "0,0,1280,720",
+    "method": "Template matching",
+    "threshold": 0.75,
+    "description": "登录按钮"
+  },
+  {
+    "itemName": "jd_apple",
+    "imageName": "jd_apple.png",
+    "roiFront": "0,0,100,100",
+    "roiBack": "0,0,1280,720",
+    "method": "Template matching",
+    "threshold": 0.75,
+    "description": "苹果登录平台按钮"
+  }
+]

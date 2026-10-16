@@ -24,6 +24,8 @@ class ConfigMenu:
         self.menu["Daily Task"] = ['DailyTrifles', 'AreaBoss', 'GoldYoukai', 'ExperienceYoukai', 'Nian',
                                    'TalismanPass', 'DemonEncounter', 'Pets', 'SoulsTidy', 'Delegation', 'WantedQuests',
                                    'Tako', 'AutoCheckinBigGod']
+        # 小号日常任务：按全局账号文件顺序切换账号并执行勾协探测
+        self.menu["Small Account Daily"] = ['JadeDetection']
         # 很肝的任务
         self.menu["Liver Emperor Exclusive"] = [
             "BondlingFairyland",

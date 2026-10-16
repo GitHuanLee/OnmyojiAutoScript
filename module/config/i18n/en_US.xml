@@ -84,6 +84,7 @@
     <message><source>Game Account</source><translation>Game Account</translation></message>
     <message><source>Game Password</source><translation>Game Password</translation></message>
     <message><source>Account Platform</source><translation>Account Platform</translation></message>
+    <message><source>Account Type</source><translation>Account Type</translation></message>
     <message><source>Remove</source><translation>Remove</translation></message>
     <message><source>Add Account</source><translation>Add Account</translation></message>
     <message><source>game_accounts_help</source><translation>Add multiple game accounts, each with its account name, password, and client platform.</translation></message>
@@ -91,5 +92,6 @@
     <message><source>game_account_help</source><translation>Enter the login name for this game account.</translation></message>
     <message><source>game_password_help</source><translation>Enter the login password for this game account.</translation></message>
     <message><source>game_account_platform_help</source><translation>Select the game client platform used by this account.</translation></message>
+    <message><source>game_account_type_help</source><translation>Select email or phone account matching mode.</translation></message>
 </context>
 </TS>

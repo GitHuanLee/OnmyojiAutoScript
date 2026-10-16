@@ -87,7 +87,8 @@
       "password": ""
     },
     "account_settings": {
-      "account_file": "config/accounts.json"
+      "account_file": "config/accounts.json",
+      "accounts": []
     }
   },
   "area_boss": {

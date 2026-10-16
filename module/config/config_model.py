@@ -71,6 +71,7 @@ from tasks.GoryouRealm.config import GoryouRealm
 from tasks.Hyakkiyakou.config import Hyakkiyakou
 from tasks.HeroTest.config import HeroTest
 from tasks.FindJade.config import FindJade
+from tasks.JadeDetection.config import JadeDetection
 from tasks.MemoryScrolls.config import MemoryScrolls
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -135,6 +136,7 @@ class ConfigModel(ConfigBase):
     hyakkiyakou: Hyakkiyakou = Field(default_factory=Hyakkiyakou)
     hero_test: HeroTest = Field(default_factory=HeroTest)
     find_jade: FindJade = Field(default_factory=FindJade)
+    jade_detection: JadeDetection = Field(default_factory=JadeDetection)
     memory_scrolls: MemoryScrolls = Field(default_factory=MemoryScrolls)
 
     # 这些是每周任务

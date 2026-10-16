@@ -16,7 +16,7 @@ class ConfigManual:
         > ActivityShikigami > BudokaiTournament > WantedQuests
         > BondlingFairyland > EvoZone > GoryouRealm > HeroTest
         > CollectiveMissions
-        > Pets > TalismanPass > Delegation > Hyakkiyakou
+        > Pets > TalismanPass > Delegation > Hyakkiyakou > JadeDetection
         > Secret > WeeklyTrifles > MysteryShop > Duel 
         > TrueOrochi > RichMan
         > MetaDemon > FrogBoss > FloatParade > Quiz > KittyShop > DyeTrials > MemoryScrolls
