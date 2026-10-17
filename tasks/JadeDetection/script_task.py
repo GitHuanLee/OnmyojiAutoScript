@@ -418,8 +418,20 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
                     roi_back=tuple(account_list.roi),
                     name="jd_account_row",
                 )
-                self.click(target, interval=1)
-                return True
+                # 网易账号弹窗的首次点击可能只完成选中高亮，必须确认弹窗已关闭；
+                # 否则后续平台按钮点击会落在账号列表上，登录处理器也会进入错误页面。
+                for attempt in range(3):
+                    self.click(target, interval=1)
+                    for _ in range(8):
+                        self.screenshot()
+                        if self.appear(self.I_SA_ACCOUNT_LOGIN_BTN):
+                            return True
+                        if not self.appear(self.I_JD_ACCOUNT_DROPDOWN):
+                            return True
+                    if attempt < 2:
+                        logger.warning("Account row click did not close account list, retry %s/2", attempt + 1)
+                logger.warning("Account row selected but account list remains open: %s", account.account)
+                return False
 
             # OCR 结果不再变化时说明已经到列表底部，避免无限上滑。
             if self.appear(self.I_JD_ACCOUNT_BOTTOM):
