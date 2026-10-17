@@ -15,6 +15,7 @@ from tasks.Component.SwitchAccount.assets import SwitchAccountAssets
 from tasks.Component.SwitchAccount.exit_game import ExitGame
 from tasks.GameUi.game_ui import GameUi
 from tasks.Restart.login import LoginHandler
+from tasks.Restart.assets import RestartAssets
 from tasks.GlobalGame.config import GameAccount, GameAccountPlatform, GameAccountType
 from tasks.JadeDetection.assets import JadeDetectionAssets
 from tasks.GameUi.page import page_login, page_main
@@ -106,7 +107,7 @@ class AccountEvoZoneTask(EvoZoneTask):
         return super().set_next_run(task, *args, **kwargs)
 
 
-class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsAssets):
+class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsAssets, RestartAssets):
     """小号日常的勾协探测任务。
 
     任务按全局账号文件顺序登录账号，根据 JadeDetection 开关探测协作任务并按账号覆盖记录，
@@ -356,13 +357,34 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
         platform_button = self.I_JD_APPLE if account.platform == GameAccountPlatform.IOS else self.I_SA_LOGIN_FORM_ANDROID
         if not self.ui_click(self.I_JD_LOGIN, platform_button, interval=1.5, timeout=20):
             return False
-        # 平台按钮点击后可能直接进入加载页，也可能先显示区服/进入游戏按钮；
-        # 统一交给 LoginHandler 处理，避免依赖单一版本的“进入游戏”模板。
-        self.appear_then_click(platform_button, interval=1.5)
+
+        # 账号列表中的平台按钮必须先被点击，之后才允许交给登录处理器；
+        # 若点击动画或网络延迟导致列表仍在当前页面，重试平台按钮，避免
+        # LoginHandler 在账号列表页面持续 OCR“进入游戏”按钮。
+        if not self._wait_account_login_transition(platform_button):
+            logger.warning("Account list did not leave login page for account %s", account.account)
+            return False
 
         # app_handle_login 负责加载页、登录页弹窗、区服选择和进入庭院后的收取流程。
         JadeDetectionLoginHandler(config=self.config, device=self.device).app_handle_login()
         return True
+
+    def _wait_account_login_transition(self, platform_button) -> bool:
+        """确认账号列表已进入登录流程，必要时重试平台按钮。
+
+        :param platform_button: 当前账号对应的 Android 或 iOS 平台按钮。
+        :return: 识别到登录表单、区服选择或进入游戏状态时返回 True。
+        """
+        for _ in range(20):
+            self.screenshot()
+            if (self.appear(self.I_LOGIN_8)
+                    or self.appear(self.I_LOGIN_SPECIFIC_SERVE)
+                    or self.appear(self.I_CHECK_LOGIN_FORM)):
+                return True
+            if self.appear(self.I_SA_ACCOUNT_LOGIN_BTN):
+                self.appear_then_click(platform_button, interval=1.5)
+                continue
+        return False
 
     def _select_account(self, account: GameAccount) -> bool:
         """在“常用”账号列表中按 OCR 匹配并点击目标账号。
