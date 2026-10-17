@@ -181,7 +181,7 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
                     continue
                 jade_kind = self._classify_jade(button)
                 self._write_cooperation_record(account, cooperation_type, jade_kind)
-                logger.info("Detected %s cooperation for account %s", jade_kind, account.account)
+                logger.info("Detected %s for account %s", jade_kind, account.account)
                 break
         finally:
             # 记录与否不改变悬赏任务的结束路径；关闭当前悬赏页后统一回到庭院，
@@ -194,6 +194,43 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
         if self.appear(self.I_UI_BACK_RED):
             self.ui_click_until_disappear(self.I_UI_BACK_RED, interval=1)
         self.goto_page(page_main)
+
+    def _classify_jade(self, button) -> str:
+        """打开一次勾协详情，区分普通勾协与现世勾协并关闭详情。
+
+        :param button: 当前勾协卡片的邀请位规则，仅用于计算详情入口坐标。
+        :return: ``普通勾协``、``现世勾协`` 或无法识别时的 ``未知勾协``。
+        """
+        x, y, width, height = button.roi_front
+        # 原悬赏任务使用邀请位上方 40 像素作为详情入口；这里只点击一次，
+        # 后续只截图识别，避免页面加载期间重复点击触发框架保护。
+        self.device.click(
+            x=x + width // 2,
+            y=y - 40,
+            control_name=f"{button.name}_detail",
+        )
+        result = "未知勾协"
+        for _ in range(10):
+            sleep(0.5)
+            self.screenshot()
+            if self.appear(WantedQuestsAssets.I_WQ_TRACE_ONE_REALWORLD):
+                result = "现世勾协"
+                break
+            if (self.appear(WantedQuestsAssets.I_WQ_TRACE_ONE_ENABLE)
+                    or self.appear(WantedQuestsAssets.I_WQ_TRACE_ONE_DISABLE)):
+                result = "普通勾协"
+                break
+
+        # 仅在详情状态出现时执行关闭，避免误点击悬赏列表。
+        if result != "未知勾协":
+            self.ui_click_until_smt_disappear(
+                WantedQuestsAssets.C_WQ_TRACE_ONE_CLOSE,
+                stop=WantedQuestsAssets.I_WQ_TRACE_ONE_CHECK_OPENED,
+                interval=1.5,
+            )
+        else:
+            logger.warning("Unable to classify jade cooperation button: %s", button.name)
+        return result
 
     def _open_wanted_quests(self) -> bool:
         """按只做协作任务的前置流程打开悬赏页面，不邀请或追踪好友。"""
@@ -250,31 +287,6 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
                     detected.append((cooperation_type, button))
                     break
         return detected
-
-    def _classify_jade(self, button) -> str:
-        """打开勾协详情判定普通或现世任务，然后关闭详情页。"""
-        for _ in range(10):
-            self.screenshot()
-            if self.appear(WantedQuestsAssets.I_WQ_TRACE_ONE_REALWORLD):
-                result = "现世勾协"
-                break
-            if self.appear(WantedQuestsAssets.I_WQ_TRACE_ONE_ENABLE):
-                result = "普通勾协"
-                break
-            if self.appear(WantedQuestsAssets.I_WQ_TRACE_ONE_DISABLE):
-                self.click(WantedQuestsAssets.I_WQ_TRACE_ONE_DISABLE, interval=1.5)
-                continue
-            # 邀请位上方区域打开该协作详情；与原任务 trace_one 使用相同坐标约定。
-            self.device.click(button.roi_front[0], button.roi_front[1] - 40,
-                              control_name=f"{button.name}_detail")
-        else:
-            raise RuntimeError(f"Unable to classify jade cooperation button: {button.name}")
-        self.ui_click_until_smt_disappear(
-            WantedQuestsAssets.C_WQ_TRACE_ONE_CLOSE,
-            stop=WantedQuestsAssets.I_WQ_TRACE_ONE_CHECK_OPENED,
-            interval=1.5,
-        )
-        return result
 
     def _write_cooperation_record(self, account: GameAccount, cooperation_type: CooperationType,
                                   jade_kind: str) -> None:
