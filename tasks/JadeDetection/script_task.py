@@ -2,7 +2,7 @@ import json
 import os
 import re
 import tempfile
-from time import monotonic
+from time import monotonic, sleep
 from datetime import datetime
 from pathlib import Path
 
@@ -418,7 +418,6 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
         :return: 找到账号并点击返回 True；列表到底仍未找到返回 False。
         """
         account_list = self.O_SA_ACCOUNT_ACCOUNT_LIST
-        last_ocr: tuple[str, ...] = ()
         for _ in range(30):
             self.screenshot()
             # 下拉菜单未展开时先打开；点击“常用”后通常已展开，此分支兼容动画尚未完成的界面。
@@ -456,13 +455,14 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
                 logger.warning("Account row selected but account list remains open: %s", account.account)
                 return False
 
-            # OCR 结果不再变化时说明已经到列表底部，避免无限上滑。
+            # 只有识别到底部标志才结束；列表 OCR 暂时不变不能说明已经到底，
+            # 因为本次小步滑动可能仍在动画中或只移动了一个行高。
             if self.appear(self.I_JD_ACCOUNT_BOTTOM):
+                logger.warning("Account reached list bottom without finding: %s", account.account)
                 return False
-            if texts and texts == last_ocr:
-                return False
-            last_ocr = texts
-            self.swipe(self.S_JD_ACCOUNT_LIST_UP, interval=1.5)
+            self.swipe(self.S_JD_ACCOUNT_LIST_UP, interval=0)
+            # 一次滑动完成后再 OCR，禁止连续发起滑动导致触发底部按钮误点击。
+            sleep(1.0)
         return False
 
     @staticmethod
