@@ -381,6 +381,10 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
                     or self.appear(self.I_LOGIN_SPECIFIC_SERVE)
                     or self.appear(self.I_CHECK_LOGIN_FORM)):
                 return True
+            # 账号列表关闭后通常先显示平台选择页；必须在这里点击一次，
+            # 否则会一直等待“进入游戏”按钮而停留在该页面。
+            if self.appear_then_click(platform_button, interval=1.5):
+                continue
             if self.appear(self.I_SA_ACCOUNT_LOGIN_BTN):
                 self.appear_then_click(platform_button, interval=1.5)
                 continue
