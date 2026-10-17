@@ -31,6 +31,7 @@ class LoginHandler(BaseTask, RestartAssets, GameUiAssets, GeneralBuffAssets):
         confirm_timer = Timer(1.5, count=2).start()
         orientation_timer = Timer(10)
         login_success = False
+        enter_game_ocr_misses = 0
 
         while 1:
             # Watch device rotation
@@ -133,6 +134,7 @@ class LoginHandler(BaseTask, RestartAssets, GameUiAssets, GeneralBuffAssets):
                 
             # 点击’进入游戏‘
             if not self.appear(self.I_LOGIN_8):
+                enter_game_ocr_misses = 0
                 continue
             
             # 登录体验服时，点击“进入游戏”速度过快，可能会出现体验服的弹窗
@@ -140,7 +142,24 @@ class LoginHandler(BaseTask, RestartAssets, GameUiAssets, GeneralBuffAssets):
                 if self.appear_then_click(self.I_EARLY_SERVER_CANCEL):
                     logger.info('Cancel switch from early server to normal server')
                     continue
-            if self.ocr_appear_click(self.O_LOGIN_ENTER_GAME_ORIGIN, interval=3) or self.ocr_appear_click(self.O_LOGIN_ENTER_GAME, interval=3):
+            entered_game = self.ocr_appear_click(self.O_LOGIN_ENTER_GAME_ORIGIN, interval=3) \
+                or self.ocr_appear_click(self.O_LOGIN_ENTER_GAME, interval=3)
+            if entered_game:
+                enter_game_ocr_misses = 0
+                self.wait_until_appear(self.I_LOGIN_SPECIFIC_SERVE, True, wait_time=5)
+                continue
+
+            # 登录按钮图片已经确认存在，但低质量截图或文字变形会让 OCR 连续失败；
+            # 连续失败时按按钮固定区域兜底，避免登录循环永不产生有效操作。
+            enter_game_ocr_misses += 1
+            if enter_game_ocr_misses >= 3:
+                x, y, width, height = self.O_LOGIN_ENTER_GAME_ORIGIN.roi_front
+                self.device.click(
+                    x=x + width // 2,
+                    y=y + height // 2,
+                    control_name="login_enter_game_ocr_fallback",
+                )
+                enter_game_ocr_misses = 0
                 self.wait_until_appear(self.I_LOGIN_SPECIFIC_SERVE, True, wait_time=5)
                 continue
 

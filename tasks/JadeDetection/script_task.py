@@ -2,6 +2,7 @@ import json
 import os
 import re
 import tempfile
+from time import monotonic
 from datetime import datetime
 from pathlib import Path
 
@@ -181,6 +182,7 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
 
     def _open_wanted_quests(self) -> bool:
         """按只做协作任务的前置流程打开悬赏页面，不邀请或追踪好友。"""
+        back_seen_at = None
         for _ in range(30):
             self.screenshot()
             if self.appear(WantedQuestsAssets.I_TRACE_ENABLE) or self.appear(WantedQuestsAssets.I_TRACE_DISABLE):
@@ -190,10 +192,18 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
             if self.appear_then_click_multi_scale(
                 WantedQuestsAssets.I_WQ_DONE, scale_range=(0.8, 1.2), interval=1
             ):
+                back_seen_at = None
                 continue
             if self.appear(self.I_UI_BACK_RED):
-                self.ui_click_until_disappear(self.I_UI_BACK_RED)
-                return False
+                # 悬赏页面刚打开时可能需要数秒加载 OCR/图片资源；原任务会持续等待，
+                # 不能因一次未识别到追踪按钮就立即返回庭院，否则会漏掉当前账号的任务。
+                if back_seen_at is None:
+                    back_seen_at = monotonic()
+                if monotonic() - back_seen_at >= 5:
+                    self.ui_click_until_disappear(self.I_UI_BACK_RED)
+                    return False
+            else:
+                back_seen_at = None
         return False
 
     @staticmethod
