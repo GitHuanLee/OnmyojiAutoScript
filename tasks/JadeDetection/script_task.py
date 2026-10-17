@@ -40,7 +40,7 @@ class AccountEvoZoneTask(EvoZoneTask):
         :param config: EvoZone 原邀请配置；人数和邀请选项沿用该配置。
         :return: 无返回值；邀请失败仍由通用流程记录并处理。
         """
-        jade_config = self.config.jade_detection
+        jade_config = self.config.jade_detection.jade_detection_config
         jade_invite_config = config.model_copy(update={
             "friend_1": jade_config.guild_30_friend_1,
             "friend_2": jade_config.guild_30_friend_2,
@@ -119,7 +119,8 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
         不邀请好友、不开始协作战斗。之后可按配置运行寮30；账号文件错误或人工接管异常向上抛出。
         """
         accounts = self.config.load_game_accounts()
-        if self.config.jade_detection.jade_detection_enable:
+        jade_config = self.config.jade_detection.jade_detection_config
+        if jade_config.jade_detection_enable:
             self._clear_previous_cooperation_record()
         for index, account in enumerate(accounts, start=1):
             logger.info("Jade detection account %s/%s: %s", index, len(accounts), account.account)
@@ -128,9 +129,9 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
             if not self._switch_to_account(account):
                 logger.warning("Account not found in client account list: %s", account.account)
                 continue
-            if self.config.jade_detection.jade_detection_enable:
+            if jade_config.jade_detection_enable:
                 self._detect_cooperation(account)
-            if self.config.jade_detection.guild_30_enable:
+            if jade_config.guild_30_enable:
                 try:
                     AccountEvoZoneTask(config=self.config, device=self.device).run()
                 except TaskEnd:
