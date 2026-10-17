@@ -377,6 +377,13 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
         """
         for _ in range(20):
             self.screenshot()
+            # 先处理“选择登录平台”中间页：识别到当前配置的平台按钮后点击，
+            # 下一轮再确认是否进入登录表单、区服选择或进入游戏页面。
+            if self.appear(self.I_SA_LOGIN_FORM_APPLE) or self.appear(self.I_SA_LOGIN_FORM_ANDROID):
+                if self.appear_then_click(platform_button, interval=1.5):
+                    continue
+                logger.warning("Login platform page detected but configured platform button not found")
+                continue
             if (self.appear(self.I_LOGIN_8)
                     or self.appear(self.I_LOGIN_SPECIFIC_SERVE)
                     or self.appear(self.I_CHECK_LOGIN_FORM)):
