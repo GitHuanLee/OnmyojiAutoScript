@@ -165,21 +165,35 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
         :return: 无返回值；无匹配任务时不写入该账号记录。
         """
         self.goto_page(page_main)
-        if not self._open_wanted_quests():
-            logger.info("Wanted quests page unavailable for account %s", account.account)
-            return
-        if not any(self.appear(button) for button in self._cooperation_buttons()):
-            logger.info("No cooperation task for account %s", account.account)
-            return
+        try:
+            if not self._open_wanted_quests():
+                logger.info("Wanted quests page unavailable for account %s", account.account)
+                return
+            if not any(self.appear(button) for button in self._cooperation_buttons()):
+                logger.info("No cooperation task for account %s", account.account)
+                return
 
-        configured_mask = CooperationSelectMask[self.config.wanted_quests.wanted_quests_config.cooperation_type.value]
-        for cooperation_type, button in self._cooperation_info():
-            if cooperation_type != CooperationType.Jade or not (cooperation_type & configured_mask):
-                continue
-            jade_kind = self._classify_jade(button)
-            self._write_cooperation_record(account, cooperation_type, jade_kind)
-            logger.info("Detected %s cooperation for account %s", jade_kind, account.account)
-            return
+            configured_mask = CooperationSelectMask[
+                self.config.wanted_quests.wanted_quests_config.cooperation_type.value
+            ]
+            for cooperation_type, button in self._cooperation_info():
+                if cooperation_type != CooperationType.Jade or not (cooperation_type & configured_mask):
+                    continue
+                jade_kind = self._classify_jade(button)
+                self._write_cooperation_record(account, cooperation_type, jade_kind)
+                logger.info("Detected %s cooperation for account %s", jade_kind, account.account)
+                break
+        finally:
+            # 记录与否不改变悬赏任务的结束路径；关闭当前悬赏页后统一回到庭院，
+            # 让下一账号切换和后续寮30任务从稳定页面开始。
+            self._finish_cooperation_detection()
+
+    def _finish_cooperation_detection(self) -> None:
+        """关闭悬赏探测页面并确认回到庭院。"""
+        self.screenshot()
+        if self.appear(self.I_UI_BACK_RED):
+            self.ui_click_until_disappear(self.I_UI_BACK_RED, interval=1)
+        self.goto_page(page_main)
 
     def _open_wanted_quests(self) -> bool:
         """按只做协作任务的前置流程打开悬赏页面，不邀请或追踪好友。"""
