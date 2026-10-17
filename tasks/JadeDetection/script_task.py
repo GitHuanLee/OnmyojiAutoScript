@@ -437,8 +437,6 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
                         self.screenshot()
                         if self.appear(self.I_SA_ACCOUNT_LOGIN_BTN):
                             return True
-                        if not self.appear(self.I_JD_ACCOUNT_DROPDOWN):
-                            return True
                     if attempt < 2:
                         logger.warning("Account row click did not close account list, retry %s/2", attempt + 1)
                 logger.warning("Account row selected but account list remains open: %s", account.account)
