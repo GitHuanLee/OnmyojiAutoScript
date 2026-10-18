@@ -67,8 +67,9 @@ class AccountEvoZoneTask(EvoZoneTask):
             for result in rule.detect_and_ocr(self.device.image):
                 text = result.ocr_text.strip()
                 if self._matches_guild_30_friend_name(name, text):
-                    x = int(result.box[0, 0] + rule.roi[0])
-                    y = int(result.box[0, 1] + rule.roi[1])
+                    # OCR 框坐标相对规则 ROI，取框中心点击角色卡片文字区域。
+                    x = int((result.box[:, 0].min() + result.box[:, 0].max()) / 2 + rule.roi[0])
+                    y = int((result.box[:, 1].min() + result.box[:, 1].max()) / 2 + rule.roi[1])
                     candidates.append((y, x, text, rule.name))
 
         if not candidates:
@@ -77,11 +78,30 @@ class AccountEvoZoneTask(EvoZoneTask):
         y, x, matched_name, rule_name = min(candidates)
         logger.info("Guild 30 friend name %s matched %s", name, matched_name)
         self.device.click(x=x, y=y, control_name=f"{rule_name}_fuzzy_friend")
-        while True:
+        # 选中标记位于当前好友列的右上角，不能使用 GeneralInvite 中固定的
+        # (895, 373) ROI；在当前列的 OCR 区域内复用同一模板做动态匹配。
+        for _ in range(3):
+            sleep(0.3)
             self.screenshot()
-            if self.appear(self.I_SELECTED):
-                return True
-            self.device.click(x=x, y=y, control_name=f"{rule_name}_fuzzy_friend")
+            if self._guild_30_selected(rule_name):
+                break
+        return True
+
+    def _guild_30_selected(self, rule_name: str) -> bool:
+        """在当前好友列中识别角色卡片右上角的选中勾标记。
+
+        :param rule_name: 被选中的 OCR 好友列规则名称。
+        :return: 当前列出现选中标记时返回 True，否则返回 False。
+        """
+        rule = self.O_FRIEND_NAME_1 if rule_name == self.O_FRIEND_NAME_1.name else self.O_FRIEND_NAME_2
+        previous_roi = self.I_SELECTED.roi_back
+        try:
+            # match_all 会临时使用传入区域；限制在当前好友列可避免误匹配其他控件。
+            x, y, width, height = rule.roi
+            selected_roi = (max(0, x - 20), max(0, y - 30), width + 60, height + 60)
+            return bool(self.I_SELECTED.match_all(self.device.image, roi=selected_roi))
+        finally:
+            self.I_SELECTED.roi_back = previous_roi
 
     @staticmethod
     def _matches_guild_30_friend_name(configured_name: str, detected_name: str) -> bool:
