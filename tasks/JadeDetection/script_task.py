@@ -20,6 +20,7 @@ from tasks.GlobalGame.config import GameAccount, GameAccountPlatform, GameAccoun
 from tasks.JadeDetection.assets import JadeDetectionAssets
 from tasks.GameUi.page import page_login, page_main
 from tasks.EvoZone.script_task import ScriptTask as EvoZoneTask
+from tasks.CollectiveMissions.script_task import ScriptTask as CollectiveMissionsTask
 from tasks.WantedQuests.assets import WantedQuestsAssets
 from tasks.WantedQuests.config import CooperationSelectMask, CooperationType
 
@@ -127,6 +128,27 @@ class AccountEvoZoneTask(EvoZoneTask):
         return super().set_next_run(task, *args, **kwargs)
 
 
+class AccountCollectiveMissionsTask(CollectiveMissionsTask):
+    """在多账号寮30流程中复用集体任务奖励领取逻辑。
+
+    该子类只负责复用集体任务页面导航和奖励领取；寮30的调度权属于
+    外层 `JadeDetection`，因此屏蔽集体任务自身的下一次运行时间写入，避免嵌套
+    任务修改账号切换流程的调度状态。
+    """
+
+    def set_next_run(self, task: str, *args, **kwargs) -> None:
+        """阻止嵌套集体任务覆盖寮30外层任务的调度时间。
+
+        :param task: 被嵌套任务请求设置的任务名。
+        :param args: 保留基类调度接口的位置参数。
+        :param kwargs: 保留基类调度接口的关键字参数。
+        :return: 集体任务嵌套执行时不写入调度状态。
+        """
+        if task == "CollectiveMissions":
+            return None
+        return super().set_next_run(task, *args, **kwargs)
+
+
 class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsAssets, RestartAssets):
     """小号日常的勾协探测任务。
 
@@ -158,8 +180,24 @@ class ScriptTask(GameUi, SwitchAccountAssets, JadeDetectionAssets, WantedQuestsA
                     AccountEvoZoneTask(config=self.config, device=self.device).run()
                 except TaskEnd:
                     logger.info("Guild 30 completed for account: %s", account.account)
+                    self._submit_collective_mission(account)
         self.set_next_run(task="JadeDetection", success=True, finish=True)
         raise TaskEnd("JadeDetection")
+
+    def _submit_collective_mission(self, account: GameAccount) -> None:
+        """寮30完成后进入阴阳寮领取已完成的集体任务奖励。
+
+        :param account: 当前账号，仅用于日志定位。
+        :return: 奖励检查结束后返回；页面识别或弹窗处理失败交给顶层调度器处理。
+
+        集体任务组件复用阴阳寮、神社和集体任务页面导航。进入阴阳寮时
+        可能连续出现活动宣传和首次教学弹窗，统一页面钩子及未知页关闭器会按识别结果
+        逐个关闭；奖励弹窗则由集体任务现有的重复领取逻辑处理，直到回到任务列表。
+        """
+        logger.info("Checking collective mission reward after Guild 30: %s", account.account)
+        task = AccountCollectiveMissionsTask(config=self.config, device=self.device)
+        task.collect_completed_partner_mission()
+        logger.info("Collective mission check finished for account: %s", account.account)
 
     def _prepare_account_switch(self) -> None:
         """在处理下一个账号前恢复到账号切换页面。

@@ -16,6 +16,7 @@ from module.atom.ocr import RuleOcr
 from tasks.GameUi.game_ui import GameUi
 from tasks.GameUi.page import page_main, page_guild
 from tasks.CollectiveMissions.assets import CollectiveMissionsAssets
+from tasks.KekkaiUtilize.assets import KekkaiUtilizeAssets
 
 
 class MC(str, Enum):
@@ -32,8 +33,95 @@ class MC(str, Enum):
     UNKNOWN = '未知'
     FEED = '远远不够'  # 喂N卡
 
-class ScriptTask(GameUi, CollectiveMissionsAssets):
+class ScriptTask(GameUi, CollectiveMissionsAssets, KekkaiUtilizeAssets):
     missions: list = []  # 用于记录三个的任务的种类
+
+    def collect_completed_partner_mission(self) -> bool:
+        """进入集体任务页并领取已完成的右侧结伴同行奖励。
+
+        :return: 发现并领取奖励返回 True；当前没有可领取奖励返回 False。
+        :raises RequestHumanTakeover: 页面导航超时或奖励弹窗无法在限定次数内关闭。
+
+        按页面图标导航到阴阳寮、神社和集体任务，依次消除首次进入可能出现的
+        活动宣传/教学弹窗。只操作集体任务列表中可识别的“领取奖励”按钮，避免
+        误触其他任务；奖励展示期间持续点击，直至奖励层消失并回到任务列表。
+        """
+        self.goto_page(page_guild)
+        self._dismiss_guild_entry_popups()
+        if not self.ui_click(self.I_CM_SHRINE, self.I_CM_CM, timeout=30):
+            raise RequestHumanTakeover("Unable to open guild shrine")
+        if not self.ui_click(self.I_CM_CM, self.I_CM_RECORDS, timeout=30):
+            raise RequestHumanTakeover("Unable to open collective missions")
+
+        claimed = False
+        reward_popup_seen = False
+        for _ in range(60):
+            self.screenshot()
+            if self.appear(self.I_UI_REWARD, threshold=0.6):
+                reward_popup_seen = True
+                self.ui_reward_appear_click()
+                continue
+            if reward_popup_seen and self.appear(self.I_CM_RECORDS):
+                logger.info("Collective mission reward popup closed")
+                return True
+            if self._click_right_partner_reward():
+                claimed = True
+                continue
+            if not self.appear(self.I_CM_RECORDS):
+                # 动画切页时继续识别，避免把短暂过渡误认为没有奖励。
+                if claimed:
+                    # 领取奖励后游戏以点击任意位置关闭奖励面板；标题模板漏识别时，
+                    # 使用通用奖励层的安全点击区域继续尝试，等待列表标志确认恢复。
+                    self.click(self.C_UI_REWARD, interval=0.8)
+                continue
+            if claimed:
+                return True
+            logger.info("No completed partner mission reward is available")
+            return False
+
+        raise RequestHumanTakeover("Collective mission reward did not return to its list")
+
+    def _click_right_partner_reward(self) -> bool:
+        """仅在最右侧结伴同行卡片区域识别并领取奖励。
+
+        :return: 右侧卡片出现领取按钮并已点击时返回 True。
+        """
+        reward_roi = self.I_CM_REWARDS.roi_back
+        reward_position = self.I_CM_REWARDS.roi_front
+        try:
+            # 通用领取模板覆盖三张卡片；缩小搜索区可防止误领左侧材料任务。
+            self.I_CM_REWARDS.roi_back = (890, 455, 240, 100)
+            return self.appear_then_click(self.I_CM_REWARDS, interval=1)
+        finally:
+            self.I_CM_REWARDS.roi_back = reward_roi
+            self.I_CM_REWARDS.roi_front = reward_position
+
+    def _dismiss_guild_entry_popups(self) -> None:
+        """按识别结果关闭进入阴阳寮时可能连续出现的活动和教学弹窗。
+
+        :return: 连续两次截图未发现目标弹窗后返回。
+        :raises RequestHumanTakeover: 多个弹窗持续遮挡页面且超过处理上限。
+        """
+        clean_frames = 0
+        for _ in range(20):
+            self.screenshot()
+            if self.appear_then_click(self.I_PLANT_TREE_CLOSE, interval=0.5):
+                clean_frames = 0
+                continue
+            if self.appear_then_click(self.I_AD_CLOSE_RED, interval=0.5):
+                clean_frames = 0
+                continue
+            if self.appear_then_click(self.I_UI_CANCEL_SAMLL, interval=0.5):
+                clean_frames = 0
+                continue
+            if self.appear_then_click(self.I_UI_BACK_RED, interval=0.5):
+                clean_frames = 0
+                continue
+            clean_frames += 1
+            if clean_frames >= 2:
+                return
+            time.sleep(0.3)
+        raise RequestHumanTakeover("Guild entry popups did not close")
 
     @cached_property
     def rule(self) -> list:
