@@ -115,8 +115,8 @@
   },
   {
     "itemName": "random_left",
-    "roiFront": "17,104,55,370",
-    "roiBack": "17,104,55,370",
+    "roiFront": "120,120,55,354",
+    "roiBack": "120,120,55,354",
     "description": "左边随机点击"
   },
   {

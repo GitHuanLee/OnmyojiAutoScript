@@ -136,7 +136,8 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         logger.info('Create team')
         while 1:
             self.screenshot()
-            if self.appear(self.I_CHECK_TEAM):
+            # 部分账号的队伍页头像状态不同或未解锁；右下角创建队伍按钮才是稳定入口。
+            if self.appear(self.I_CREATE_ROOM):
                 break
             if self.appear_then_click(self.I_FORM_TEAM, interval=1):
                 continue

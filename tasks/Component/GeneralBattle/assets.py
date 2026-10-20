@@ -65,7 +65,7 @@ class GeneralBattleAssets:
 	# 战斗的时候有一定的概率随机点击 
 	C_RANDOM_CLICK = RuleClick(roi_front=(104,79,1050,507), roi_back=(255,65,100,100), name="random_click")
 	# 左边随机点击 
-	C_RANDOM_LEFT = RuleClick(roi_front=(17,104,55,370), roi_back=(17,104,55,370), name="random_left")
+	C_RANDOM_LEFT = RuleClick(roi_front=(120,120,55,354), roi_back=(120,120,55,354), name="random_left")
 	# 右边随机点击 
 	C_RANDOM_RIGHT = RuleClick(roi_front=(1185,115,79,388), roi_back=(1185,115,79,388), name="random_right")
 	# 上边随机点击 
