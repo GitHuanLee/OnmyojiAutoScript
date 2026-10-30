@@ -33,7 +33,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
     def _battle_before_team_ready(self) -> None:
         """首次觉醒战斗前自动上阵首张协战式神。
 
-        业务规则：进入首次觉醒准备界面后，点击式神区域并等待左下角“交替”标识；
+        业务规则：进入首次觉醒准备界面后，点击式神区域并等待左下角“全部”标识；
         确认进入列表后，无条件将首张式神卡片拖到屏幕中心完成上阵。后续准备和战斗
         仍交由通用战斗流程处理，界面识别超时则回到既有准备流程。
 
@@ -62,7 +62,7 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 sleep(0.2)
                 continue
             logger.info('确认进入式神切换界面，开始长按拖拽首张式神卡片')
-            # 只有确认出现“交替”标识后才拖动，避免在战斗场景误操作。
+            # 只有确认出现“全部”分类标识后才拖动，避免在战斗场景误操作。
             # 先长按选中首张卡片，再沿左下到右上的斜线拖至屏幕中心。
             # 1280x720、240DPI 下首张待出战卡片的黄框中心。
             start = (320, 598)
