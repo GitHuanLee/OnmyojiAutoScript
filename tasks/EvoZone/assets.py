@@ -10,6 +10,13 @@ from module.atom.list import RuleList
 class EvoZoneAssets: 
 
 
+	# Click Rule Assets
+	# 战斗准备式神区域
+	C_SHIKIGAMI_AREA = RuleClick(roi_front=(500,260,280,180), roi_back=(500,260,280,180), name="shikigami_area")
+	# 首张协战式神卡片
+	C_COOP_SHIKIGAMI_CARD = RuleClick(roi_front=(250,480,120,170), roi_back=(250,480,120,170), name="coop_shikigami_card")
+
+
 	# Image Rule Assets
 	# 火麒麟进入 
 	I_FIRE_KIRIN = RuleImage(roi_front=(104,120,217,325), roi_back=(104,120,217,325), threshold=0.8, method="Template matching", file="./tasks/EvoZone/o/o_fire_kirin.png")
@@ -42,5 +49,7 @@ class EvoZoneAssets:
 	# Ocr Rule Assets
 	# Ocr-description 
 	O_O_TEST_OCR = RuleOcr(roi=(128,114,349,564), area=(128,114,349,564), mode="Full", method="Default", keyword="", name="o_test_ocr")
+	# 首张协战式神卡片次数
+	O_COOP_SHIKIGAMI_COUNT = RuleOcr(roi=(270,620,110,42), area=(270,620,110,42), mode="DigitCounter", method="Default", keyword="", name="coop_shikigami_count")
 
 

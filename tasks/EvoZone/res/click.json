@@ -1,0 +1,14 @@
+[
+  {
+    "itemName": "shikigami_area",
+    "roiFront": "500,260,280,180",
+    "roiBack": "500,260,280,180",
+    "description": "战斗准备式神区域"
+  },
+  {
+    "itemName": "coop_shikigami_card",
+    "roiFront": "250,480,120,170",
+    "roiBack": "250,480,120,170",
+    "description": "首张协战式神卡片"
+  }
+]

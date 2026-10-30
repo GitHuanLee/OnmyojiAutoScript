@@ -7,5 +7,14 @@
     "method": "Default",
     "keyword": "",
     "description": "Ocr-description"
+  },
+  {
+    "itemName": "coop_shikigami_count",
+    "roiFront": "270,620,110,42",
+    "roiBack": "270,620,110,42",
+    "mode": "DigitCounter",
+    "method": "Default",
+    "keyword": "",
+    "description": "首张协战式神卡片次数"
   }
 ]

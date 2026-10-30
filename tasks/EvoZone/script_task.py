@@ -4,6 +4,8 @@
 from time import sleep
 from datetime import time, datetime, timedelta
 
+import numpy as np
+
 from tasks.Component.GeneralBattle.general_battle import GeneralBattle
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
@@ -20,6 +22,64 @@ from module.exception import TaskEnd
 
 
 class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi, EvoZoneAssets, SwitchSoul):
+
+    def _battle_before_team_ready(self) -> None:
+        """首次觉醒战斗前自动上阵首张协战式神。
+
+        业务规则：进入首次觉醒准备界面后，打开式神配置；首张卡片显示 ``x/15``
+        表示协战式神。若卡片顶部没有出战标志，则拖动到屏幕中心完成上阵。
+        后续准备和战斗仍交由通用战斗流程处理。识别不到配置界面时在有限等待后
+        回到既有准备流程，避免因资源加载或分辨率差异阻塞任务。
+
+        该钩子在通用流程切换预设阵容后调用，保证协战式神不会被预设覆盖。
+        """
+        if self.current_count == 1:
+            self._prepare_first_coop_shikigami()
+
+    @staticmethod
+    def _has_deployed_mark(image: np.ndarray, roi: tuple[int, int, int, int] = (250, 480, 120, 48)) -> bool:
+        """检测首张式神卡片顶部的白色 X 出战标志。
+
+        标志是固定卡片布局中的浅色交叉线。使用低饱和高亮像素的两条窄对角带，
+        比整块模板匹配更能适应卡片头像和特效变化，也不依赖外部二进制资源。
+        """
+        if image is None or image.ndim != 3:
+            return False
+        x, y, width, height = roi
+        crop = image[y:y + height, x:x + width]
+        if crop.shape[0] < height or crop.shape[1] < width:
+            return False
+        neutral = (crop.max(axis=2) - crop.min(axis=2) < 55) & (crop.mean(axis=2) > 165)
+        # 出战 X 位于首张卡片左上方，而不是卡片几何中心。
+        center_x, center_y = 30, 22
+        grid_y, grid_x = np.indices((height, width))
+        diagonal_a = np.abs((grid_y - center_y) - (grid_x - center_x)) <= 3
+        diagonal_b = np.abs((grid_y - center_y) + (grid_x - center_x)) <= 3
+        return int(np.count_nonzero(neutral & diagonal_a)) >= 8 and int(
+            np.count_nonzero(neutral & diagonal_b)) >= 8
+
+    def _prepare_first_coop_shikigami(self) -> None:
+        """识别并拖动首张协战式神，最多等待有限时间后返回主流程。"""
+        self.device.click(*self.C_SHIKIGAMI_AREA.center)
+        deadline = datetime.now() + timedelta(seconds=5)
+        while datetime.now() < deadline:
+            self.screenshot()
+            count = self.O_COOP_SHIKIGAMI_COUNT.ocr(self.device.image)
+            if not isinstance(count, tuple) or count[2] != 15:
+                sleep(0.2)
+                continue
+            if self._has_deployed_mark(self.device.image):
+                return
+            # 卡片中心拖到屏幕中心，触发游戏的上阵判定。
+            self.device.drag(self.C_COOP_SHIKIGAMI_CARD.center, (640, 360), name='COOP_SHIKIGAMI_DRAG')
+            verify_deadline = datetime.now() + timedelta(seconds=2)
+            while datetime.now() < verify_deadline:
+                self.screenshot()
+                if self._has_deployed_mark(self.device.image):
+                    return
+                sleep(0.2)
+            logger.warning('协战式神拖动后未检测到出战标志，继续准备流程')
+            return
 
     def run(self) -> bool:
 

@@ -68,6 +68,8 @@ class GeneralBattle(BattleWait, GeneralBuff):
                 if not getattr(config, 'lock_team_enable', False):  # 没有锁定阵容
                     if self.current_count == 1 and not confed:  # 第一次战斗且是本次第一次配置
                         self.switch_preset_team(config.preset_enable, config.preset_group, config.preset_team)
+                        # 子任务可在预设阵容落地后补充一次性战前配置，避免被预设覆盖。
+                        self._battle_before_team_ready()
                         self.check_and_open_buff(buff)
                         confed = True
                     # 点击准备(锁定阵容自动点准备,不锁定阵容前面也已经配置完毕需要点准备)
@@ -78,6 +80,10 @@ class GeneralBattle(BattleWait, GeneralBuff):
             # logger.info('Wait for preparation page')  # 这玩意刷屏
             sleep(random.uniform(0.4, 0.8))
         return False
+
+    def _battle_before_team_ready(self) -> None:
+        """预留给具体任务的战前阵容扩展钩子，默认不执行任何动作。"""
+        return None
 
     def run_general_battle_back(self, config: GeneralBattleConfig = None, exit_four: bool = False) -> bool:
         """
