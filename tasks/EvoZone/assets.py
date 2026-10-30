@@ -12,7 +12,7 @@ class EvoZoneAssets:
 
 	# Click Rule Assets
 	# 战斗准备式神区域
-	C_SHIKIGAMI_AREA = RuleClick(roi_front=(500,260,280,180), roi_back=(500,260,280,180), name="shikigami_area")
+	C_SHIKIGAMI_AREA = RuleClick(roi_front=(0,290,800,360), roi_back=(0,290,800,360), name="shikigami_area")
 	# 首张协战式神卡片
 	C_COOP_SHIKIGAMI_CARD = RuleClick(roi_front=(250,480,120,170), roi_back=(250,480,120,170), name="coop_shikigami_card")
 

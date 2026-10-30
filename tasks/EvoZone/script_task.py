@@ -33,6 +33,9 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
 
         该钩子在通用流程切换预设阵容后调用，保证协战式神不会被预设覆盖。
         """
+        if getattr(self, '_coop_shikigami_checked', False):
+            return
+        self._coop_shikigami_checked = True
         if self.current_count == 1:
             self._prepare_first_coop_shikigami()
 

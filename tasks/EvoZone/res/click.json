@@ -1,8 +1,8 @@
 [
   {
     "itemName": "shikigami_area",
-    "roiFront": "500,260,280,180",
-    "roiBack": "500,260,280,180",
+    "roiFront": "0,290,800,360",
+    "roiBack": "0,290,800,360",
     "description": "战斗准备式神区域"
   },
   {
