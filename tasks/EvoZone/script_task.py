@@ -23,6 +23,12 @@ from module.exception import TaskEnd
 
 class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi, EvoZoneAssets, SwitchSoul):
 
+    def battle_before(self, buff, config, timeout: float = 5) -> bool:
+        """首次战斗进入通用准备流程前先完成协战式神配置。"""
+        if self.current_count == 1 and not getattr(self, '_coop_shikigami_checked', False):
+            self._battle_before_team_ready()
+        return super().battle_before(buff, config, timeout)
+
     def _battle_before_team_ready(self) -> None:
         """首次觉醒战斗前自动上阵首张协战式神。
 
@@ -63,12 +69,16 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
 
     def _prepare_first_coop_shikigami(self) -> None:
         """识别并拖动首张协战式神，最多等待有限时间后返回主流程。"""
-        self.device.click(*self.C_SHIKIGAMI_AREA.center)
         deadline = datetime.now() + timedelta(seconds=5)
+        next_click = datetime.now()
         while datetime.now() < deadline:
             self.screenshot()
             count = self.O_COOP_SHIKIGAMI_COUNT.ocr(self.device.image)
             if not isinstance(count, tuple) or count[2] != 15:
+                # 配置界面可能需要一帧切换时间，短间隔重试点击红框区域。
+                if datetime.now() >= next_click:
+                    self.click(self.C_SHIKIGAMI_AREA)
+                    next_click = datetime.now() + timedelta(milliseconds=700)
                 sleep(0.2)
                 continue
             if self._has_deployed_mark(self.device.image):
