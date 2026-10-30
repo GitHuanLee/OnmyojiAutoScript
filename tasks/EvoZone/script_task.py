@@ -70,14 +70,18 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
     def _prepare_first_coop_shikigami(self) -> None:
         """识别并拖动首张协战式神，最多等待有限时间后返回主流程。"""
         deadline = datetime.now() + timedelta(seconds=5)
-        next_click = datetime.now()
+        click_points = ((400, 470), (260, 520), (600, 520))
+        click_index = 0
+        next_click = datetime.min
         while datetime.now() < deadline:
             self.screenshot()
             count = self.O_COOP_SHIKIGAMI_COUNT.ocr(self.device.image)
             if not isinstance(count, tuple) or count[2] != 15:
-                # 配置界面可能需要一帧切换时间，短间隔重试点击红框区域。
+                # 队员与队长的角色站位不同，固定点击红框内多个稳定点，避免随机点落在不可点击对象上。
                 if datetime.now() >= next_click:
-                    self.click(self.C_SHIKIGAMI_AREA)
+                    x, y = click_points[click_index % len(click_points)]
+                    self.device.click(x=x, y=y, control_name='SHIKIGAMI_AREA')
+                    click_index += 1
                     next_click = datetime.now() + timedelta(milliseconds=700)
                 sleep(0.2)
                 continue
