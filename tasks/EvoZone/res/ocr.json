@@ -9,12 +9,12 @@
     "description": "Ocr-description"
   },
   {
-    "itemName": "coop_shikigami_count",
-    "roiFront": "270,620,110,42",
-    "roiBack": "270,620,110,42",
-    "mode": "DigitCounter",
+    "itemName": "shikigami_switch_page",
+    "roiFront": "0,390,100,170",
+    "roiBack": "0,390,120,190",
+    "mode": "Single",
     "method": "Default",
-    "keyword": "",
-    "description": "首张协战式神卡片次数"
+    "keyword": "交替",
+    "description": "式神切换界面交替标识"
   }
 ]

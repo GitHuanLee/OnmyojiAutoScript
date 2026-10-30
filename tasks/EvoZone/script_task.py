@@ -4,8 +4,6 @@
 from time import sleep
 from datetime import time, datetime, timedelta
 
-import numpy as np
-
 from tasks.Component.GeneralBattle.general_battle import GeneralBattle
 from tasks.Component.GeneralInvite.general_invite import GeneralInvite
 from tasks.Component.GeneralBuff.general_buff import GeneralBuff
@@ -32,10 +30,9 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
     def _battle_before_team_ready(self) -> None:
         """首次觉醒战斗前自动上阵首张协战式神。
 
-        业务规则：进入首次觉醒准备界面后，打开式神配置；首张卡片显示 ``x/15``
-        表示协战式神。若卡片顶部没有出战标志，则拖动到屏幕中心完成上阵。
-        后续准备和战斗仍交由通用战斗流程处理。识别不到配置界面时在有限等待后
-        回到既有准备流程，避免因资源加载或分辨率差异阻塞任务。
+        业务规则：进入首次觉醒准备界面后，点击式神区域并等待左下角“交替”标识；
+        确认进入列表后，无条件将首张式神卡片拖到屏幕中心完成上阵。后续准备和战斗
+        仍交由通用战斗流程处理，界面识别超时则回到既有准备流程。
 
         该钩子在通用流程切换预设阵容后调用，保证协战式神不会被预设覆盖。
         """
@@ -45,38 +42,15 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         if self.current_count == 1:
             self._prepare_first_coop_shikigami()
 
-    @staticmethod
-    def _has_deployed_mark(image: np.ndarray, roi: tuple[int, int, int, int] = (250, 480, 120, 48)) -> bool:
-        """检测首张式神卡片顶部的白色 X 出战标志。
-
-        标志是固定卡片布局中的浅色交叉线。使用低饱和高亮像素的两条窄对角带，
-        比整块模板匹配更能适应卡片头像和特效变化，也不依赖外部二进制资源。
-        """
-        if image is None or image.ndim != 3:
-            return False
-        x, y, width, height = roi
-        crop = image[y:y + height, x:x + width]
-        if crop.shape[0] < height or crop.shape[1] < width:
-            return False
-        neutral = (crop.max(axis=2) - crop.min(axis=2) < 55) & (crop.mean(axis=2) > 165)
-        # 出战 X 位于首张卡片左上方，而不是卡片几何中心。
-        center_x, center_y = 30, 22
-        grid_y, grid_x = np.indices((height, width))
-        diagonal_a = np.abs((grid_y - center_y) - (grid_x - center_x)) <= 3
-        diagonal_b = np.abs((grid_y - center_y) + (grid_x - center_x)) <= 3
-        return int(np.count_nonzero(neutral & diagonal_a)) >= 8 and int(
-            np.count_nonzero(neutral & diagonal_b)) >= 8
-
     def _prepare_first_coop_shikigami(self) -> None:
-        """识别并拖动首张协战式神，最多等待有限时间后返回主流程。"""
+        """确认式神切换界面后，将第一张式神卡片拖到屏幕中心。"""
         deadline = datetime.now() + timedelta(seconds=5)
         click_points = ((400, 470), (260, 520), (600, 520))
         click_index = 0
         next_click = datetime.min
         while datetime.now() < deadline:
             self.screenshot()
-            count = self.O_COOP_SHIKIGAMI_COUNT.ocr(self.device.image)
-            if not isinstance(count, tuple) or count[2] != 15:
+            if not self.ocr_appear(self.O_SHIKIGAMI_SWITCH_PAGE, exact=False):
                 # 队员与队长的角色站位不同，固定点击红框内多个稳定点，避免随机点落在不可点击对象上。
                 if datetime.now() >= next_click:
                     x, y = click_points[click_index % len(click_points)]
@@ -85,17 +59,9 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     next_click = datetime.now() + timedelta(milliseconds=700)
                 sleep(0.2)
                 continue
-            if self._has_deployed_mark(self.device.image):
-                return
-            # 卡片中心拖到屏幕中心，触发游戏的上阵判定。
+            # 只有确认出现“交替”标识后才拖动，避免在战斗场景误操作。
             self.device.drag(self.C_COOP_SHIKIGAMI_CARD.center, (640, 360), name='COOP_SHIKIGAMI_DRAG')
-            verify_deadline = datetime.now() + timedelta(seconds=2)
-            while datetime.now() < verify_deadline:
-                self.screenshot()
-                if self._has_deployed_mark(self.device.image):
-                    return
-                sleep(0.2)
-            logger.warning('协战式神拖动后未检测到出战标志，继续准备流程')
+            sleep(1)
             return
 
     def run(self) -> bool:

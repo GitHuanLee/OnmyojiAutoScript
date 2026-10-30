@@ -49,7 +49,7 @@ class EvoZoneAssets:
 	# Ocr Rule Assets
 	# Ocr-description 
 	O_O_TEST_OCR = RuleOcr(roi=(128,114,349,564), area=(128,114,349,564), mode="Full", method="Default", keyword="", name="o_test_ocr")
-	# 首张协战式神卡片次数
-	O_COOP_SHIKIGAMI_COUNT = RuleOcr(roi=(270,620,110,42), area=(270,620,110,42), mode="DigitCounter", method="Default", keyword="", name="coop_shikigami_count")
+	# 式神切换界面交替标识
+	O_SHIKIGAMI_SWITCH_PAGE = RuleOcr(roi=(0,390,100,170), area=(0,390,120,190), mode="Single", method="Default", keyword="交替", name="shikigami_switch_page")
 
 
