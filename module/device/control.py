@@ -232,7 +232,8 @@ class Control(Minitouch, Adb, Scrcpy, Window):
         logger.info(
             'Drag %s -> %s' % (point2str(*p1), point2str(*p2))
         )
-        method = self.config.script.emulator.control_method
+        # 与 swipe() 保持一致，从脚本设备配置读取控制方式；Script 没有 emulator 属性。
+        method = self.config.script.device.control_method
         if method == 'minitouch':
             self.drag_minitouch(p1, p2, point_random=point_random, hold_duration=hold_duration)
         elif method == 'uiautomator2':
