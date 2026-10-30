@@ -10,11 +10,11 @@
   },
   {
     "itemName": "shikigami_switch_page",
-    "roiFront": "0,390,100,170",
-    "roiBack": "0,390,120,190",
-    "mode": "Single",
+    "roiFront": "0,350,180,260",
+    "roiBack": "0,350,180,260",
+    "mode": "Full",
     "method": "Default",
-    "keyword": "交替",
+    "keyword": "交",
     "description": "式神切换界面交替标识"
   }
 ]

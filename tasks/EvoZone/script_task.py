@@ -16,7 +16,7 @@ from tasks.EvoZone.config import EvoZone, UserStatus, KirinType
 from tasks.Component.GeneralBattle.battle_wait import battle_wait_strategy
 
 from module.logger import logger
-from module.exception import TaskEnd
+from module.exception import RequestHumanTakeover, TaskEnd
 
 
 class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi, EvoZoneAssets, SwitchSoul):
@@ -24,7 +24,10 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
     def battle_before(self, buff, config, timeout: float = 5) -> bool:
         """首次战斗进入通用准备流程前先完成协战式神配置。"""
         if self.current_count == 1 and not getattr(self, '_coop_shikigami_checked', False):
-            self._battle_before_team_ready()
+            if not self._prepare_first_coop_shikigami():
+                # 协战配置未完成时禁止进入通用准备流程，避免直接点击准备开战。
+                raise RequestHumanTakeover('协战式神未完成上阵，已停止点击准备')
+            self._coop_shikigami_checked = True
         return super().battle_before(buff, config, timeout)
 
     def _battle_before_team_ready(self) -> None:
@@ -37,14 +40,13 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
         该钩子在通用流程切换预设阵容后调用，保证协战式神不会被预设覆盖。
         """
         if getattr(self, '_coop_shikigami_checked', False):
-            return
-        self._coop_shikigami_checked = True
-        if self.current_count == 1:
-            self._prepare_first_coop_shikigami()
+            return None
+        if self.current_count == 1 and self._prepare_first_coop_shikigami():
+            self._coop_shikigami_checked = True
 
-    def _prepare_first_coop_shikigami(self) -> None:
+    def _prepare_first_coop_shikigami(self) -> bool:
         """确认式神切换界面后，将第一张式神卡片拖到屏幕中心。"""
-        deadline = datetime.now() + timedelta(seconds=5)
+        deadline = datetime.now() + timedelta(seconds=8)
         click_points = ((400, 470), (260, 520), (600, 520))
         click_index = 0
         next_click = datetime.min
@@ -59,14 +61,17 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                     next_click = datetime.now() + timedelta(milliseconds=700)
                 sleep(0.2)
                 continue
+            logger.info('确认进入式神切换界面，开始长按拖拽首张式神卡片')
             # 只有确认出现“交替”标识后才拖动，避免在战斗场景误操作。
             # 先长按选中首张卡片，再沿左下到右上的斜线拖至屏幕中心。
-            start = (310, 565)
-            self.device.long_click(*start, duration=0.8, control_name='COOP_SHIKIGAMI_SELECT')
-            self.device.drag(start, (640, 360), name='COOP_SHIKIGAMI_DRAG')
+            # 1280x720、240DPI 下首张待出战卡片的黄框中心。
+            start = (320, 598)
+            self.device.drag(start, (640, 360), hold_duration=0.8, name='COOP_SHIKIGAMI_DRAG')
             # 游戏需要时间刷新出战阵容，等待完成后再让通用流程点击准备。
             sleep(3)
-            return
+            return True
+        logger.error('等待式神切换界面超时，禁止点击准备')
+        return False
 
     def run(self) -> bool:
 

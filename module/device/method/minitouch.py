@@ -612,7 +612,7 @@ class Minitouch(Connection):
         self.minitouch_send()
 
     @retry
-    def drag_minitouch(self, p1, p2, point_random=(-10, -10, 10, 10)):
+    def drag_minitouch(self, p1, p2, point_random=(-10, -10, 10, 10), hold_duration=0):
         p1 = np.array(p1) - random_rectangle_point(point_random)
         p2 = np.array(p2) - random_rectangle_point(point_random)
         points = insert_swipe(p0=p1, p3=p2, speed=20)
@@ -620,6 +620,9 @@ class Minitouch(Connection):
 
         builder.down(*points[0]).commit()
         self.minitouch_send()
+        if hold_duration:
+            builder.move(*points[0]).commit().wait(int(hold_duration * 1000))
+            self.minitouch_send()
 
         for point in points[1:]:
             builder.move(*point).commit().wait(random.randint(6, 15))

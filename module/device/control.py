@@ -226,7 +226,7 @@ class Control(Minitouch, Adb, Scrcpy, Window):
         self.swipe(p1, p2, duration=duration, name=name, distance_check=distance_check)
 
     def drag(self, p1, p2, segments=1, shake=(0, 15), point_random=(-10, -10, 10, 10), shake_random=(-5, -5, 5, 5),
-             swipe_duration=0.25, shake_duration=0.1, name='DRAG'):
+             swipe_duration=0.25, shake_duration=0.1, hold_duration=0, name='DRAG'):
         self.handle_control_check(name)
         p1, p2 = ensure_int(p1, p2)
         logger.info(
@@ -234,7 +234,7 @@ class Control(Minitouch, Adb, Scrcpy, Window):
         )
         method = self.config.script.emulator.control_method
         if method == 'minitouch':
-            self.drag_minitouch(p1, p2, point_random=point_random)
+            self.drag_minitouch(p1, p2, point_random=point_random, hold_duration=hold_duration)
         elif method == 'uiautomator2':
             self.drag_uiautomator2(
                 p1, p2, segments=segments, shake=shake, point_random=point_random, shake_random=shake_random,

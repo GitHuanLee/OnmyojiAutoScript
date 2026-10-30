@@ -50,6 +50,6 @@ class EvoZoneAssets:
 	# Ocr-description 
 	O_O_TEST_OCR = RuleOcr(roi=(128,114,349,564), area=(128,114,349,564), mode="Full", method="Default", keyword="", name="o_test_ocr")
 	# 式神切换界面交替标识
-	O_SHIKIGAMI_SWITCH_PAGE = RuleOcr(roi=(0,390,100,170), area=(0,390,120,190), mode="Single", method="Default", keyword="交替", name="shikigami_switch_page")
+	O_SHIKIGAMI_SWITCH_PAGE = RuleOcr(roi=(0,350,180,260), area=(0,350,180,260), mode="Full", method="Default", keyword="交", name="shikigami_switch_page")
 
 
