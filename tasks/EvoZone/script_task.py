@@ -60,8 +60,12 @@ class ScriptTask(GeneralBattle, GeneralInvite, GeneralBuff, GeneralRoom, GameUi,
                 sleep(0.2)
                 continue
             # 只有确认出现“交替”标识后才拖动，避免在战斗场景误操作。
-            self.device.drag(self.C_COOP_SHIKIGAMI_CARD.center, (640, 360), name='COOP_SHIKIGAMI_DRAG')
-            sleep(1)
+            # 先长按选中首张卡片，再沿左下到右上的斜线拖至屏幕中心。
+            start = (310, 565)
+            self.device.long_click(*start, duration=0.8, control_name='COOP_SHIKIGAMI_SELECT')
+            self.device.drag(start, (640, 360), name='COOP_SHIKIGAMI_DRAG')
+            # 游戏需要时间刷新出战阵容，等待完成后再让通用流程点击准备。
+            sleep(3)
             return
 
     def run(self) -> bool:
